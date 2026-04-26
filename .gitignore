@@ -1,0 +1,77 @@
+# dependencies
+node_modules/
+.pnp/
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+
+# testing
+coverage/
+*.lcov
+
+# next.js
+.next/
+out/
+build/
+dist/
+
+# production
+*.tsbuildinfo
+next-env.d.ts
+
+# environment
+.env
+.env*.local
+.env.development.local
+.env.test.local
+.env.production.local
+# .env.example IS committed
+
+# editors and OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+!.vscode/settings.shared.json
+!.vscode/extensions.json
+.idea/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# vercel
+.vercel
+
+# misc
+*.pem
+
+# turbo / monorepo build cache
+.turbo/
+
+# supabase local dev
+supabase/.branches
+supabase/.temp
+supabase/migrations/_*
+
+# drizzle
+drizzle/.tmp/
+
+# storybook / ladle
+storybook-static/
+ladle-static/
+
+# claude code agents directory (per-machine)
+.claude/
+
+# Local-only documents — brainstorms, drafts, anything you don't want in the
+# public repo. The folder itself is ignored; files inside it never tracked.
+private/

@@ -1,0 +1,46 @@
+{
+  "name": "nuansu",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "packageManager": "pnpm@10.33.2+sha512.a90faf6feeab71ad6c6e57f94e0fe1a12f5dcc22cd754db40ae9593eb6a3e0b6b12e3540218bb37ae083404b1f2ce6db2a4121e979829b4aff94b99f49da1cf8",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @nuansu/web dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "pnpm --filter @nuansu/web test:e2e",
+    "bench": "vitest bench --run",
+    "db:migrate": "pnpm --filter @nuansu/web db:migrate",
+    "db:seed": "pnpm --filter @nuansu/web db:seed",
+    "ladle": "pnpm --filter @nuansu/web ladle",
+    "lighthouse": "pnpm --filter @nuansu/web lighthouse",
+    "prepare": "lefthook install"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "eslint": "^9.18.0",
+    "@eslint/js": "^9.18.0",
+    "typescript-eslint": "^8.20.0",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-sonarjs": "^3.0.1",
+    "globals": "^15.14.0",
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.6.9",
+    "lefthook": "^1.10.4",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.4",
+    "@vitest/coverage-v8": "^3.0.4"
+  }
+}

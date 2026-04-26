@@ -1,0 +1,70 @@
+# Local development services for Nuansu.
+# Run: `docker compose up -d`
+#
+# Services:
+#   postgres  — Postgres 16, app DB (port 5432)
+#   redis     — Redis 7, rate-limit + cache (port 6379)
+#   minio     — S3-compatible object storage stub (Supabase Storage replacement) (port 9000 + console 9001)
+#   mailcrab  — local SMTP catcher with web UI for inspecting outbound email (SMTP 1025, web 1080)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: nuansu-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nuansu
+      POSTGRES_PASSWORD: nuansu_dev
+      POSTGRES_DB: nuansu
+    ports:
+      - "5432:5432"
+    volumes:
+      - nuansu_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nuansu -d nuansu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: nuansu-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    container_name: nuansu-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: nuansu
+      MINIO_ROOT_PASSWORD: nuansu_dev_secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - nuansu_minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailcrab:
+    image: marlonb/mailcrab:latest
+    container_name: nuansu-mailcrab
+    restart: unless-stopped
+    ports:
+      - "1025:1025" # SMTP
+      - "1080:1080" # web UI
+
+volumes:
+  nuansu_pg_data:
+  nuansu_minio_data:

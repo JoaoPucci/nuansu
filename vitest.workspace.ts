@@ -1,0 +1,8 @@
+import { defineWorkspace } from "vitest/config";
+
+export default defineWorkspace([
+  "apps/web/vitest.config.ts",
+  "packages/schemas/vitest.config.ts",
+  "packages/prompts/vitest.config.ts",
+  "packages/i18n/vitest.config.ts",
+]);

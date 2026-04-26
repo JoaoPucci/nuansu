@@ -1,0 +1,20 @@
+{
+  "app": {
+    "name": "Nuansu",
+    "tagline": "Translate messages without losing the message."
+  },
+  "nav": {
+    "chats": "Chats",
+    "settings": "Settings",
+    "signIn": "Sign in",
+    "signOut": "Sign out"
+  },
+  "actions": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm",
+    "back": "Back",
+    "continue": "Continue"
+  }
+}

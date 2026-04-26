@@ -1,0 +1,18 @@
+name = "nuansu"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./dist"
+
+# Local dev: `wrangler pages dev` serves Pages Functions on :8788.
+# Vite (vite dev) on :5173 proxies /api/* to wrangler.
+
+[dev]
+port = 8788
+
+# Cron Triggers (Phase 7) — placeholders for v1 jobs.
+# [triggers]
+# crons = [
+#   "*/5 * * * *",   # process_export_queue
+#   "0 * * * *",     # purge_soft_deleted, process_deletion_queue
+#   "0 3 * * *",     # usage_rollup (daily 3am UTC)
+# ]

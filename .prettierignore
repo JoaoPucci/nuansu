@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.next/
+.vercel/
+.wrangler/
+.dev/
+.turbo/
+coverage/
+**/routeTree.gen.ts
+pnpm-lock.yaml

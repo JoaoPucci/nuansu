@@ -1,0 +1,18 @@
+{
+  "name": "@nuansu/i18n",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./en/*": "./src/en/*.json",
+    "./ja/*": "./src/ja/*.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "echo 'no build (TS source consumed directly)'"
+  }
+}

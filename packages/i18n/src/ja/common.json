@@ -1,0 +1,20 @@
+{
+  "app": {
+    "name": "Nuansu",
+    "tagline": "メッセージのニュアンスを失わずに翻訳する。"
+  },
+  "nav": {
+    "chats": "チャット",
+    "settings": "設定",
+    "signIn": "ログイン",
+    "signOut": "ログアウト"
+  },
+  "actions": {
+    "save": "保存",
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "confirm": "確認",
+    "back": "戻る",
+    "continue": "続ける"
+  }
+}
