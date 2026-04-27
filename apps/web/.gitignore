@@ -1,6 +1,7 @@
 dist/
 .wrangler/
 .dev/
+.dev.vars
 .ladle/dist
 .ladle/build
 playwright-report/

@@ -5,4 +5,11 @@ export default defineWorkspace([
   "packages/schemas/vitest.config.ts",
   "packages/prompts/vitest.config.ts",
   "packages/i18n/vitest.config.ts",
+  {
+    test: {
+      name: "scripts",
+      include: ["scripts/**/*.test.mjs"],
+      environment: "node",
+    },
+  },
 ]);

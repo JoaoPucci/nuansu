@@ -108,12 +108,13 @@ export default tseslint.config(
     },
   },
   {
-    // Config files: untyped lint (no project-aware rules)
+    // Config + tooling scripts: untyped lint (no project-aware rules).
     files: [
       "*.config.{js,ts,mjs,cjs}",
       "**/*.config.{js,ts,mjs,cjs}",
       "**/vitest.workspace.ts",
       "**/.ladle/**/*",
+      "scripts/**/*.{js,mjs,cjs,ts}",
     ],
     languageOptions: {
       parserOptions: { project: null, projectService: false },
