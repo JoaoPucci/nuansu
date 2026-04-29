@@ -392,32 +392,67 @@ const requireAuth = async (c, next) => {
 
 Single module: `apps/web/server/translation/`. All LLM calls go through it.
 
-### 4.1 Inputs (TranslateRequest)
+### 5.1 Inputs (TranslateRequest, InboundRequest)
 
 ```ts
+type RecentThreadTurn = {
+  author: "mine" | "theirs";
+  source: string;
+  target: string;
+};
+
+type PrefsSnapshot = {
+  source_lang: string;
+  target_lang: string;
+  register: string | null;
+  naturalness: number;
+  my_nickname: string | null;
+  contact_name_src: string | null;
+  contact_name_tgt: string | null;
+  notes: string | null;
+  explain_verbosity: "terse" | "standard" | "verbose";
+};
+
 type TranslateRequest = {
   draft_source_text: string;
   prior_translation?: TranslationObject; // when refining
   refine_instruction?: string;
-  prefs_snapshot: {
-    source_lang: string;
-    target_lang: string;
-    register: string | null;
-    naturalness: number;
-    my_nickname: string | null;
-    contact_name_src: string | null;
-    contact_name_tgt: string | null;
-    notes: string | null;
-    explain_verbosity: "terse" | "standard" | "verbose";
-  };
+  prefs_snapshot: PrefsSnapshot;
   name_locks: { source_form: string; target_form?: string }[];
-  recent_thread: { author: "mine" | "theirs"; source: string; target: string }[]; // last N
+  recent_thread: RecentThreadTurn[]; // see §5.1.1
+  idempotency_key: string;
+  user_id: string;
+};
+
+type InboundRequest = {
+  pasted_target_text: string; // the message received, in target_lang
+  prefs_snapshot: PrefsSnapshot;
+  name_locks: { source_form: string; target_form?: string }[];
+  recent_thread: RecentThreadTurn[]; // see §5.1.1
   idempotency_key: string;
   user_id: string;
 };
 ```
 
-### 4.2 Output (TranslationStreamChunk)
+#### 5.1.1 `recent_thread` window
+
+The chat is **stateless from the LLM's perspective** — there is no provider-side thread/conversation ID. We assemble the context window per call by attaching a slice of recent turns. This keeps the system prompt aggressively cacheable and per-call payloads small.
+
+Window selection rules (server-side, applied at orchestrator boundary):
+
+- **Count cap:** at most the **last 10 turns** (counting both `mine` and `theirs`).
+- **Token cap:** at most **~2,000 tokens** total across all turns (estimated via the Anthropic tokeniser; cheap to approximate as `chars / 3`).
+- **Whichever cap binds first wins.** Drop oldest turns until both caps are satisfied.
+- **Per-turn truncation:** any single turn whose `source` or `target` exceeds **800 tokens** is truncated to the first 800 tokens with a trailing `…[truncated]` marker. This prevents one giant pasted message from blowing the budget.
+- For `recent_thread`, only **committed** messages are included. In-flight drafts and uncommitted candidates never appear in another call's context.
+- Turns are ordered oldest→newest in the array (the LLM reads top-to-bottom as conversation history).
+- Both `source` and `target` are sent for every turn; the prompt instructs the model that each turn is bilingual ground truth, not a translation task.
+
+`InboundRequest` carries the same `recent_thread` slice as `TranslateRequest` — inbound paste resolution often hinges on prior context (pronoun antecedents, ongoing topic, "let me check" landing on something specific).
+
+The window numbers (`10` / `2000` / `800`) live as named constants in `apps/web/server/translation/context.ts` so they're tweakable without a prompt-version bump. A future pass may switch from a fixed window to a relevance-scored selection, but v1 keeps it simple.
+
+### 5.2 Output (TranslationStreamChunk)
 
 The stream emits typed fragments that build up to a Translation Object:
 
@@ -436,7 +471,7 @@ type TranslationStreamChunk =
 
 The server fans the LLM's structured tokens out into these chunks. The LLM is asked for JSON; a streaming JSON parser (or Anthropic's native partial-JSON handling) emits chunks as soon as a field stabilises.
 
-### 4.3 System prompt design
+### 5.3 System prompt design
 
 Stored in `packages/prompts` as versioned files. The v1 prompt has these sections, in order:
 
@@ -450,11 +485,12 @@ Stored in `packages/prompts` as versioned files. The v1 prompt has these section
 3. **Context** — language pair, register, naturalness, contact context, notes.
 4. **Name locks** — the list, instructions to preserve verbatim.
 5. **Output schema** — strict JSON, fields as in §5.2.
-6. **Few-shot examples** — 3 pairs covering name preservation, register match, idiom adaptation.
+6. **Recent thread** (when present) — the bilingual conversation slice from §5.1.1, framed as "prior turns for context, do not re-translate."
+7. **Few-shot examples** — 3 pairs covering name preservation, register match, idiom adaptation.
 
-The first three sections are aggressively cached. Per-call context is small.
+The first three sections are aggressively cached. Per-call context (sections 4–6) is small and changes per call. Few-shot examples (7) sit at the end of the cached prefix.
 
-### 4.4 Model routing
+### 5.4 Model routing
 
 ```
 default (free + paid)   -> Claude Sonnet 4.6
@@ -465,22 +501,22 @@ back-translation        -> Claude Haiku 4.5
 
 **v1 policy:** Sonnet 4.6 for both Free and Pro outbound translations — the JP-nuance bar is the product moat and Free tier is bounded by the daily quota (10/day), not by a cheaper model. A `LLM_FREE_TIER_DOWNGRADE` feature flag is wired up but off by default; flip to Haiku-on-free if costs spike or abuse appears.
 
-### 4.5 Reference-check (back-translation diff)
+### 5.5 Reference-check (back-translation diff)
 
 After the natural pass is finalised on commit, a background task back-translates the natural target text into source-language and computes a diff against the user's draft. Significant divergence flags an audit point retroactively (becomes visible on the message history). Cheap (Haiku); doesn't block the foreground.
 
-### 4.6 Retries and timeouts
+### 5.6 Retries and timeouts
 
 - Provider call timeout: 25s for streaming, 12s for non-streaming.
 - Single retry on `provider_unavailable` (5xx, timeouts) with 500ms backoff.
 - Translation-specific JSON-parse failure: regenerate once with stricter "valid JSON only" instruction.
 
-### 4.7 Idempotency
+### 5.7 Idempotency
 
 - Each translate request includes an `Idempotency-Key`.
 - Server caches `(user_id, idempotency_key)` → response in Redis for 10 minutes; replays return the cached stream from a buffer (or a sentinel "in-flight" if the original is mid-stream).
 
-### 4.8 Cost & token accounting
+### 5.8 Cost & token accounting
 
 - Every LLM call writes a `usage_events` row with `input_tokens`, `output_tokens`, `cached_tokens`, `cost_micro_usd`.
 - Daily roll-up via SQL view (or scheduled materialised view) for the usage UI.
