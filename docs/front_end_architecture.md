@@ -340,11 +340,17 @@ How:
 
 ## 16. Testing strategy
 
-- **Unit / component tests** (Vitest + RTL): schema validators, reducers, the SSE parser, audit-point UI state. Target: anything pure.
-- **Component visual** (Ladle): every bespoke component has stories for default / loading / error / edge cases.
-- **E2E** (Playwright): the four happy paths from `requirements.md §7`. Pinned to a seeded staging DB and a stubbed LLM that replays canned chunked responses.
-- **Accessibility tests** (axe-core via Playwright): on each main route.
+Project-wide quality and testing policy lives in [`quality.md`](./quality.md) — TDD discipline, the full layer matrix, all CI quality gates (complexity, coverage, CRAP score, Lighthouse, bundle size, a11y, bench), property-based testing, and the v2 mutation-testing plan.
+
+Client-side specifics (what the policy applies to here):
+
+- **Unit / component tests** (Vitest + RTL): schema validators, reducers (composer state machine, suggestions store), the SSE parser, audit-point UI state, the compose-time hint regex, the `useCopyMessage` hook. Target: anything pure.
+- **Component visual** (Ladle): every bespoke component has 4 stories minimum — default / loading / error / edge. Includes the new `SuggestionCard`, `ComposeHint`, `Coachmark`, `SampleChatBanner`, and the `MessageBubble` action icon trio (`docs/design_system.md §7.1`).
+- **E2E** (Playwright vs. LLM stub): happy paths from `requirements.md §7`, the first-run experience (R4a — sample chat → first translation → coachmark dismissal), the copy affordance (R24a — tap copy, menu copy, keyboard copy), and the drift-detection flow (`back_end_architecture.md §5.4` — apply / keep_both / dismiss).
+- **A11y** (axe-core via Playwright): every authenticated route, including the suggestion card, coachmarks, and copy popover.
 - **Performance smoke** (Lighthouse CI): on every PR for marketing + app shell.
+
+Property-based tests required on client-side modules per `quality.md §5`: SSE chunk parser, `TranslationStreamChunk` schema round-trip, name-lock matcher (compose-time hint regex), audit point reducer, recent-thread window selector.
 
 ## 17. Repo discipline
 

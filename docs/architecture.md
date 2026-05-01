@@ -353,6 +353,10 @@ A monorepo with one deployed app (Cloudflare Pages = SPA + Functions in one unit
 
 - PostHog feature flags. Used for: prompt versions, model tier defaults, quota values, rollout of risky UI changes.
 
+### 9.7 Quality & testing policy
+
+Cross-cutting quality, testing, and CI gate policy lives in [`quality.md`](./quality.md). Highlights: strict TDD; complexity capped via sonarjs (cognitive ≤ 15, cyclomatic ≤ 12); coverage ≥ 80% on non-UI; CRAP score ≤ 30 per function (custom CI script); property-based testing for parsers/reducers/transformations via fast-check; fitness functions for architectural invariants; mutation testing deferred to v2. The bars exist to constrain AI-assisted development — every gate is enforced by CI, not by review etiquette.
+
 ## 10. Scaling story
 
 **v1 (0 → 1k users):**

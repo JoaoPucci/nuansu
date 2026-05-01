@@ -727,16 +727,20 @@ Detailed in `security.md`. Highlights enforced server-side:
 
 ## 13. Testing strategy
 
-| Layer        | Tool                             | Coverage                                                                                          |
-| ------------ | -------------------------------- | ------------------------------------------------------------------------------------------------- |
-| Unit         | Vitest                           | Schemas, utilities, the SSE parser, the rate-limit Lua, the prompt builder                        |
-| Integration  | Vitest + ephemeral Postgres      | DB layer, ownership wrappers, key route handlers                                                  |
-| Contract     | zod schemas shared with frontend | Compile-time guarantee                                                                            |
-| Prompt evals | Custom harness                   | Golden-set translations scored by a JP-native reviewer; regression triggers per prompt-version PR |
-| Load         | k6                               | Read paths and a simulated translate flow with stubbed LLM                                        |
-| Chaos        | Manual                           | LLM 5xx, DB connection blip, Stripe webhook replay                                                |
+Project-wide quality and testing policy lives in [`quality.md`](./quality.md) — TDD discipline, the full layer matrix, all CI quality gates (complexity, coverage, CRAP score, Lighthouse, bundle size, a11y, bench), property-based testing, and the v2 mutation-testing plan.
 
-Prompt evals are non-negotiable: a regression in `audit_point` accuracy or `name preservation` blocks the prompt-version PR.
+Server-side specifics (what the policy applies to here):
+
+| Layer        | What it covers on the server side                                                                 |
+| ------------ | ------------------------------------------------------------------------------------------------- |
+| Unit         | Schemas, utilities, the SSE parser, the rate-limit Lua, the prompt builder, envelope encryption   |
+| Integration  | DB layer (against ephemeral Postgres), ownership wrappers, route handlers, Better Auth flows      |
+| Contract     | zod schemas shared with frontend — compile-time guarantee that the wire format matches both sides |
+| Prompt evals | Golden-set translations scored by a JP-native reviewer; regression blocks per-prompt-version PR   |
+| Load         | k6 against read paths + simulated translate flow with stubbed LLM (deferred to post-launch)       |
+| Chaos        | Manual: LLM 5xx, DB connection blip, Stripe webhook replay                                        |
+
+Prompt evals are non-negotiable: a regression in `audit_point` accuracy or `name preservation` blocks the prompt-version PR. See `quality.md §3` for the cross-cutting matrix and `§5` for the property-based tests required on server-side modules (recent-thread window selector, quota Lua atomicity, envelope encryption round-trip).
 
 ## 14. Local development
 
