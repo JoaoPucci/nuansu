@@ -1,5 +1,8 @@
 # Nuansu
 
+[![License: AGPL v3](https://img.shields.io/github/license/JoaoPucci/nuansu?style=flat-square)](./LICENSE)
+[![CI](https://img.shields.io/github/actions/workflow/status/JoaoPucci/nuansu/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/JoaoPucci/nuansu/actions/workflows/ci.yml)
+
 A translation copilot for personal messages across a language barrier.
 
 Nuansu helps a non-speaker write faithful, tone-correct messages in another language without losing names, register, or meaning to an LLM's authorial drift. Two parallel translation passes (literal + natural), an explainable audit list of every change, per-chat preferences, and a chat-shaped UI keep the user in control of what gets sent.
