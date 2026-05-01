@@ -70,9 +70,9 @@ If you find yourself writing implementation code without a test, **stop and writ
 
 ### 3.2 Acceptance tests are read-only to AI
 
-**Tests under `apps/web/test/acceptance/**`and`apps/web/test/e2e/**` are the spec.** AI tools may not modify them.
+Tests under `apps/web/test/acceptance/**` and `apps/web/test/e2e/**` are **the spec**. AI tools may not modify them.
 
-- If a test fails, **fix the code in `apps/web/src/**`or`apps/web/server/**`** to make it pass.
+- If a test fails, fix the code in `apps/web/src/**` or `apps/web/server/**` to make it pass.
 - Do not change the assertion. Do not soften the expectation. Do not skip or `.only` the test. Do not modify the test name to make it pass.
 - If the test itself appears wrong, **stop and ask the human author**. Only humans modify acceptance tests.
 - Other test categories (unit, integration, component) may be edited, but each edit must preserve or strengthen the assertion. Weakening a passing test to bypass a failure is the same anti-pattern at a smaller scale.

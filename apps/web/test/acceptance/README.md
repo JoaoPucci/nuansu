@@ -8,7 +8,7 @@ AI tools (Claude Code, Cursor, Copilot, etc.) **may not modify any file in this 
 
 If a test fails:
 
-1. **Fix the code in `apps/web/src/**`or`apps/web/server/**`** to make it pass.
+1. Fix the code in `apps/web/src/**` or `apps/web/server/**` to make it pass.
 2. Do not change the assertion. Do not soften the expectation. Do not skip the test. Do not add `.only`.
 3. If the test itself appears wrong, **stop and ask the human author**. Only humans modify these tests, in human-authored commits, called out explicitly in the PR description.
 
