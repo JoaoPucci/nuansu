@@ -176,7 +176,7 @@ Mechanical tests are mechanical tests — they can pass without verifying anythi
 
 ## 8. Pre-commit hooks (lefthook)
 
-Sub-30-second feedback before a commit lands. Configured in `lefthook.yml`:
+Sub-30-second feedback before a commit lands. Configured in `lefthook.yml` at the repo root:
 
 ```yaml
 pre-commit:
@@ -184,19 +184,26 @@ pre-commit:
   commands:
     typecheck:
       glob: "*.{ts,tsx}"
-      run: pnpm tsc --noEmit
+      run: pnpm typecheck
     lint:
-      glob: "*.{ts,tsx,js,mjs,cjs}"
-      run: pnpm eslint {staged_files}
+      glob: "*.{ts,tsx,js,jsx}"
+      run: pnpm exec eslint {staged_files}
     format:
-      glob: "*.{ts,tsx,js,mjs,cjs,json,md,yml,yaml}"
-      run: pnpm prettier --check {staged_files}
+      glob: "*.{ts,tsx,js,jsx,json,md,css,html,yml,yaml}"
+      run: pnpm exec prettier --check {staged_files}
     unit:
       glob: "*.{ts,tsx}"
-      run: pnpm vitest --changed --run
+      run: pnpm exec vitest --changed --run
+
+pre-push:
+  commands:
+    test:
+      run: pnpm test
 ```
 
-Pre-push hook adds a fuller suite (full unit + integration; e2e and Lighthouse only run in CI). Skipping hooks via `--no-verify` is forbidden by project policy except for explicit emergency hotfixes signed off in the PR description.
+`pnpm typecheck` runs the workspace-aware `pnpm -r typecheck`. `pnpm exec <bin>` is used over `pnpm <bin>` for tools that aren't exposed as workspace scripts.
+
+Pre-push runs the full unit + integration suite; e2e and Lighthouse only run in CI. Skipping hooks via `--no-verify` is forbidden by project policy except for explicit emergency hotfixes signed off in the PR description.
 
 ## 9. Required dependencies
 

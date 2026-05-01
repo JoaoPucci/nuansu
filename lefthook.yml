@@ -10,6 +10,11 @@ pre-commit:
     format:
       glob: "*.{ts,tsx,js,jsx,json,md,css,html,yml,yaml}"
       run: pnpm exec prettier --check {staged_files}
+    unit:
+      # Sub-30s feedback loop per docs/quality.md §8.
+      # Runs only the vitest tests reachable from staged files.
+      glob: "*.{ts,tsx}"
+      run: pnpm exec vitest --changed --run
 
 pre-push:
   commands:
