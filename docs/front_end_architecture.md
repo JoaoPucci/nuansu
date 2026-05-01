@@ -193,6 +193,44 @@ Trigger wiring lives at the call site (the composer, the audit list, the view to
 
 **Sample chat fixture rendering.** The three fixture messages are seeded server-side at onboarding-form submission (see `back_end_architecture.md §3.4`), so the client treats them like any other messages — they land in `messages` with normal `prefs_snapshot`, `model: 'fixture'`, `prompt_version: 'fixture-v1'` markers. The client doesn't need a special render path; the `model: 'fixture'` marker is purely for analytics filtering.
 
+### 6.4 Message copy interactions
+
+Copy is the product's exit action (per `requirements.md §5.7` R24a) and is treated as a first-class affordance on every `MessageBubble`. The implementation lives in `apps/web/src/features/chat/lib/copy.ts`.
+
+**Clipboard write.** Use `navigator.clipboard.writeText` (requires secure context — HTTPS in prod; `localhost` in dev satisfies it). On failure (rare — user denied permission, or non-secure context), fall back to a synchronous `document.execCommand('copy')` against a hidden `<textarea>`. Surface a toast on success; surface an error toast with retry on hard failure.
+
+**The `useCopyMessage(message)` hook** returns:
+
+```ts
+{
+  copyDefault: () => Promise<void>;          // copies natural target
+  copy: (variant: CopyVariant) => Promise<void>;
+  variants: CopyVariant[];                    // context-aware list per direction
+}
+
+type CopyVariant =
+  | "translation"   // outbound: target text we produced; inbound: source text we produced
+  | "source"        // outbound: user's original draft
+  | "original"      // inbound: target-language original they received
+  | "both";         // bilingual block: source\n\ntarget
+```
+
+The hook resolves the right variant set from `message.direction` (outbound → `translation`/`source`/`both`; inbound → `original`/`translation`/`both`).
+
+**Bubble interaction wiring.**
+
+- Trailing `copy` icon button → `copyDefault()`.
+- Trailing `caret` icon button → opens the variants popover; each item calls `copy(variant)`.
+- Long-press handler on the bubble container → opens the same popover. Implemented with a `pointerdown` + 500 ms timer; cancelled on `pointermove` (>10 px) or `pointerup`. Suppressed inside text-selection mode.
+- `contextmenu` event handler on the bubble → opens the same popover (right-click on desktop). `preventDefault()` to suppress the browser's native menu when the popover opens.
+- `keydown` handler on the focused bubble: Enter → `copyDefault()`; Shift+Enter → opens popover; Cmd/Ctrl+C → `copyDefault()`.
+
+**Native text-selection escape hatch.** The bubble container defaults to `user-select: none` to prevent the iOS long-press menu from competing with our popover. The popover includes a "Select text" item that toggles `user-select: text` on the bubble for users who explicitly want to drag-select. This toggle resets on the next chat-list navigation.
+
+**Haptic.** On `success`, call `navigator.vibrate(10)` if `'vibrate' in navigator`. Best-effort; iOS Safari ignores it but Android Chrome honours it.
+
+**Toast.** Reuse the existing `sonner` toast infrastructure with a 1.5 s duration variant (shorter than the standard 3 s — copy is high-frequency and the toast shouldn't pile up). i18n key `messages.copy.success` ("Copied").
+
 ## 7. Streaming — `useStreamedTranslation`
 
 A custom hook that owns the streaming lifecycle:

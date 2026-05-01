@@ -192,7 +192,32 @@ Two variants: `mine` (right-aligned, accent fill) and `theirs` (left-aligned, ne
 
 - Primary text in the _currently displayed_ language.
 - A "translation glyph" (subtle ⇄) to flip just this bubble.
-- A meta footer: timestamp, register badge if relevant, tap to open history.
+- A meta footer: timestamp, register badge if relevant, and a trailing **action icon trio**.
+
+**Trailing action icon trio.** Three small monochrome icons (16 px) in `text-tertiary`, 8 px gap between them, sitting at the trailing edge of the meta footer. Always visible on both mobile and desktop — no hover-reveal — because copy is the product's exit action and is too important to hide.
+
+| Icon          | Default behaviour                                                                     |
+| ------------- | ------------------------------------------------------------------------------------- |
+| `copy` (📋)   | One-tap: copy the **natural target text** to clipboard. Confirmation toast + haptic.  |
+| `caret` (⌄)   | Tap: open the copy-variants popover (see below).                                      |
+| `history` (⏱) | Tap: open the message history drawer (raw draft → candidates → audit points → final). |
+
+All three are real `<button>` elements with descriptive aria-labels (`aria-label="Copy translation"`, etc.). On focus, icon colour shifts to `text-secondary` with a 2 px outer ring in `accent-subtle`.
+
+**Copy-variants popover.** Opened by the caret, by long-press on the bubble (mobile), by right-click (desktop), or by Shift+Enter on a focused bubble. Small popover anchored to the caret with a 4 px caret-glyph, 8 px radius, `surface-2` background, `border-subtle`, `shadow-popover` elevation. Three menu items, context-aware:
+
+| Bubble direction | Menu items                                         |
+| ---------------- | -------------------------------------------------- |
+| Outbound (mine)  | _Copy translation_ · _Copy source_ · _Copy both_   |
+| Inbound (theirs) | _Copy original_ · _Copy translation_ · _Copy both_ |
+
+"Copy both" produces a fixed bilingual format: `source\n\ntarget`. No configuration knob in v1.
+
+**Confirmation toast.** "Copied" appears bottom-centred for 1.5 s (shorter than the standard 3 s — copy is high-frequency and the toast shouldn't accumulate). Haptic: light tap on iOS/Android via the Vibration API where supported. Desktop has no haptic.
+
+**Long-press behaviour on mobile.** The bubble container uses `user-select: none` to suppress the native iOS text-selection menu on long-press; long-press fires our copy-variants popover instead. A "Select text" menu item inside the popover toggles `user-select: text` on the bubble for the user who explicitly wants to drag-select.
+
+**Keyboard.** Bubbles are focusable (`tabindex="0"`). On focus: Enter copies the natural target; Shift+Enter opens the variants popover; Cmd/Ctrl+C also copies the natural target.
 
 ### 7.2 Composer
 

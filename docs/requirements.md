@@ -141,8 +141,9 @@ This is the centrepiece. The flow has four states:
 - **R22.** A per-thread toggle switches the entire view between _target-language only_, _source-language only_, and _side-by-side_.
 - **R23.** A per-message affordance opens history: original draft → candidates → audit points → final, top to bottom.
 - **R24.** Toggles are persistent per chat, scoped per device.
+- **R24a. Copy is a first-class affordance on every message bubble.** Each bubble exposes an always-visible trailing icon group: a primary `copy` icon, a `caret` that opens a copy-variants menu, and the existing `history` icon. **One-tap on the copy icon copies the natural target text** (the thing the user came here to send) regardless of the current view-toggle state — the toggle changes what's _displayed_, not what's _copied_. The caret menu offers context-aware variants: for outbound messages, _Copy translation_ / _Copy source_ / _Copy both_; for inbound messages, _Copy original_ / _Copy translation_ / _Copy both_. "Copy both" produces a fixed bilingual format (`source\n\ntarget`). On mobile, long-press on the bubble opens the same menu as the caret (redundant convenience, not the discoverable primary path); on desktop, right-click does the same. Keyboard: Enter on a focused bubble copies the natural target; Shift+Enter opens the menu; Cmd/Ctrl+C on a focused bubble also copies the natural target. Confirmation surfaces as a subtle "Copied" toast plus a light haptic on mouse + touch platforms that support it.
 
-**DoD:** Toggling does not refetch; both forms are already on the client. Switching is instant (< 100ms) and preserves scroll position.
+**DoD:** Toggling does not refetch; both forms are already on the client. Switching is instant (< 100ms) and preserves scroll position. Tapping the copy icon on any bubble — outbound or inbound, in any view-toggle state — places the natural target text in the system clipboard within 100 ms and surfaces a confirmation toast. The copy-variants menu is reachable via caret, long-press (mobile), right-click (desktop), and keyboard (Shift+Enter on focused bubble), all four paths yielding the same menu options.
 
 ### 5.8 Quotas & billing
 
