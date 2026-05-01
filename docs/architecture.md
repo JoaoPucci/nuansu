@@ -380,7 +380,7 @@ Each roadmap item maps cleanly to existing structure:
 - **Sticker / emoji semantics.** Pure client-side overlay backed by a curated catalog table; no architecture change.
 - **Auto-flashcard export.** Read-only over `messages` and `message_versions`; produces an Anki .apkg or CSV.
 - **Native apps.** Talk to the existing API. Auth via the same provider.
-- **BYO-API-key / E2E.** Adds a per-user encrypted credential vault; the translation orchestrator chooses provider per user.
+- **BYO-API-key / E2E.** Staged: BYO-Anthropic-key first (same provider, per-user contract / data-residency / billing — small lift on top of the existing orchestrator), then BYO-other-provider (GPT / Gemini) only if demand justifies the per-provider prompt families and pricing repositioning. Adds a per-user encrypted credential vault; the translation orchestrator chooses provider per user. Detail and rationale: [`questions.md`](./questions.md) "Deferred decisions (v2+)".
 - **Date mode.** Live transcription via a websocket on the worker; same Translation Object format with `direction = "transcript"`.
 
 ## 12. Risks called out in the architecture

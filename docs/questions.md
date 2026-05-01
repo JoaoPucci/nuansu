@@ -79,6 +79,32 @@ These don't block work. Verify when convenient.
 22. **Anthropic APAC inference endpoint availability** — currently US-primary; if APAC ships, point Tokyo Worker at it for lower RTT.
 23. **Cold-start latency** of Cloudflare Worker → Supabase Tokyo for streaming routes — measure and tune connection pooling if needed.
 
+## Deferred decisions (v2+)
+
+These have been considered and **explicitly excluded from v1 scope**. They're captured here so future-us doesn't relitigate from scratch.
+
+### BYO-LLM ("connect your own GPT / Anthropic / Gemini account")
+
+**v1 decision: not shipping.** Pinned to Anthropic Sonnet 4.6 (outbound) + Haiku 4.5 (inbound preview, back-translation). See [`back_end_architecture.md §5.4`](./back_end_architecture.md).
+
+**Why not in v1:**
+
+- **Prompt is provider-specific.** The anti-drift system prompt + few-shots ([`back_end_architecture.md §5.3`](./back_end_architecture.md)) are tuned to Claude's behaviour around JSON-mode adherence, negative instructions ("never katakana-ify names"), and JP register sensitivity. GPT and Gemini behave differently enough that each needs its own prompt variant + its own few-shots + its own regression tests. Maintaining three parallel prompt families is a substantial ongoing engineering and quality-eval load.
+- **Streaming JSON quirks differ.** OpenAI structured outputs, Anthropic partial JSON, and Gemini all emit subtly different streams. The `TranslationStreamChunk` parser becomes provider-conditional.
+- **Quality variance damages the brand.** "Nuansu nailed the JP nuance" only holds if we control the model. If a user's GPT output is mediocre, they blame us, not OpenAI.
+- **Pricing collapses.** At $12/mo we eat LLM cost. With BYO key, marginal cost shifts to the user — Pro becomes "$12 for UI + prompts + storage" while the user's key costs them ~$0.50/mo of usage. Pro looks expensive overnight; we'd have to drop to ~$5 or repackage as tiered (UI-only / managed / enterprise).
+- **Compliance ripples.** DPIA, [`compliance.md §8`](./compliance.md) sub-processors, and [`security.md §1`](./security.md) data flows currently name Anthropic alone. Per-provider data-flow diagrams + per-provider DPAs add real ongoing work.
+- **Credential UX.** No clean OAuth for end-user API-key delegation on OpenAI / Anthropic. Realistic flow is paste-API-key → KMS-encrypt → use server-side. That's a settings screen, key rotation, revocation, billing reconciliation, and a per-user credential vault. Non-trivial.
+
+**Does v1 architecture preclude it?** No. `LLM_PROVIDER` env is already pluggable; `packages/prompts/` is versioned. Adding a per-user provider override later means a `user_llm_credentials` table + a thin client-factory dispatcher — nothing built in v1 is wasted.
+
+**Staged roadmap (when demand surfaces):**
+
+1. **BYO Anthropic key** (Pro+ / Team tier, ~6 months post-launch if compliance customers ask). Same provider, same prompt, just per-user contract / data-residency / billing. Low engineering cost. Same quality bar.
+2. **BYO GPT / Gemini** (v2+, only if there's strong organic demand and a clear repositioning). Ships with provider-specific prompt families, regression suites, and a tiered pricing model that reflects the cost shift away from us-eating-LLM.
+
+**Don't accidentally do this in v1** by exposing provider choice in the UI. Keep the model selection server-side and not user-facing.
+
 ## Adding new questions
 
 If a new genuinely-unresolved question surfaces during implementation, add it under a "New open questions" heading at the bottom of this doc. Don't duplicate questions that already have an answer in another doc — just link to that doc instead.
