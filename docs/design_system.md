@@ -239,11 +239,51 @@ A right-slide-over (mobile: bottom-sheet). Sections: Names & nicknames, Register
 
 The signup / sign-in screen shows four entry points stacked: **email magic link**, **Google**, **Apple**, **LINE**. Buttons share our token system (filled border, neutral background, brand glyph in colour). LINE's brand green is used only for the glyph, not the whole button — keeps the row visually balanced. Order on JP locale leads with LINE; on EN locale leads with email.
 
-### 7.8 Empty / loading / error states
+### 7.8 SuggestionCard
+
+In-flow surface for preference drift suggestions emitted by the translator (see `back_end_architecture.md §5.4`). Renders inline beneath the triggering message bubble for `high`-confidence suggestions; medium/low live in the chat-header badge panel.
+
+**Anatomy:**
+
+- Leading icon: a small `⊕` (additive change) or `↻` (replacement) glyph in `text-secondary`. Icon shape carries category meaning, never colour-only.
+- One-line `reasoning` headline ("She introduced a different name", "Both of you have moved to casual register") in `text-primary` 14 px medium.
+- A secondary line showing the change as `from → to`, with a thin `text-tertiary` evidence excerpt below in 13 px (the snippet from the triggering message).
+- Three actions, equal visual weight, never two: **Apply** (primary outline button), **Keep both** (ghost button — only enabled for name-related categories), **Not now** (ghost button, `text-tertiary`).
+
+**Surface:**
+
+- Background `surface-2` (one step above the message thread background), 1 px `border-subtle`, 12 px radius (matches MessageBubble), 12 px padding.
+- Inset 32 px from the bubble's source-side edge so it visually attaches to the triggering message but doesn't take its full width.
+- Max 2 lines of reasoning + 2 lines of excerpt; truncate with ellipsis. Long excerpts open a tooltip on hover/long-press.
+
+**Behaviour:**
+
+- Enters with a 180 ms fade + 4 px upward slide; respects `prefers-reduced-motion` (fade only).
+- On action tap: optimistic collapse with 120 ms height-out, then a confirmation toast ("Updated to Misaki", "Kept both names", "Dismissed").
+- Dismiss is silent (no toast — the user said "not now" and doesn't want noise).
+- Never two cards stacked under the same bubble — server enforces one suggestion per call.
+
+**A11y:**
+
+- Card is `role="region"` with `aria-label="Preference suggestion"`.
+- The three action buttons are real `<button>` elements with descriptive labels (`aria-label="Apply: change Aiko to Misaki"`).
+- Keyboard: Tab cycles through the three actions; Enter activates; Escape dismisses (equivalent to "Not now").
+
+### 7.9 ComposeHint
+
+Soft inline surface below the composer input when the user types a draft mentioning a now-stale canonical name. Pure client-side (regex over the chat's `name_locks` flagged `prior_canonical: true`). See `front_end_architecture.md §6.2`.
+
+- One line: "Did you mean **{new_name}**?" (the new name in `text-primary` semibold; the rest in `text-secondary`).
+- Trailing affordance: an inline button **Use {new_name}** (text-only, primary colour). One tap rewrites the matched substring in the draft buffer.
+- Trailing close `×` to dismiss for the rest of the chat session.
+- Background `surface-1` with a 1 px `border-subtle` left edge as an attached strip; no full card chrome — this is a hint, not a card.
+- Enter/exit: 120 ms fade. No slide.
+
+### 7.10 Empty / loading / error states
 
 Each major view has all three. Empty states explain what to do next. Error states explain _what's wrong_ and _what to try_ — never just a sad face.
 
-### 7.9 Toasts
+### 7.11 Toasts
 
 Reserved for confirmations (Saved, Copied, Deleted) — never for errors. Bottom-centred, 3s, dismissable.
 

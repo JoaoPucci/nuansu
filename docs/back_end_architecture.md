@@ -29,31 +29,34 @@ REST-ish JSON over HTTPS. Hono router mounted at `/api/*` via Cloudflare Pages F
 
 ### 2.1 Endpoints
 
-| Method   | Path                           | Purpose                                                                                           | Notes                                                      |
-| -------- | ------------------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `POST`   | `/api/chats`                   | Create a chat                                                                                     | Body: `{ name, target_language, prefs? }`                  |
-| `GET`    | `/api/chats`                   | List chats for current user                                                                       | Pagination cursor                                          |
-| `GET`    | `/api/chats/:id`               | Fetch a chat with prefs                                                                           |                                                            |
-| `PATCH`  | `/api/chats/:id`               | Rename / archive / update meta                                                                    |                                                            |
-| `DELETE` | `/api/chats/:id`               | Soft delete (purged in 30d)                                                                       |                                                            |
-| `GET`    | `/api/chats/:id/messages`      | Paginated messages                                                                                | Cursor by `created_at`                                     |
-| `POST`   | `/api/chats/:id/messages`      | Commit a message                                                                                  | Body is a `TranslationObject`; server validates and stores |
-| `GET`    | `/api/chats/:id/messages/:mid` | Single message with full version history                                                          |                                                            |
-| `POST`   | `/api/chats/:id/translate`     | **Streaming.** Outbound translation                                                               | SSE; body `TranslateRequest`                               |
-| `POST`   | `/api/chats/:id/inbound`       | **Streaming.** Inbound paste translation                                                          | SSE; body `InboundRequest`                                 |
-| `GET`    | `/api/prefs`                   | Global prefs for current user                                                                     |                                                            |
-| `PUT`    | `/api/prefs`                   | Update global prefs                                                                               |                                                            |
-| `GET`    | `/api/chats/:id/prefs`         | Per-chat prefs                                                                                    |                                                            |
-| `PUT`    | `/api/chats/:id/prefs`         | Update per-chat prefs                                                                             |                                                            |
-| `GET`    | `/api/name-locks`              | Global name locks                                                                                 |                                                            |
-| `PUT`    | `/api/name-locks`              | Replace global name locks                                                                         |                                                            |
-| `GET`    | `/api/usage`                   | Today's usage and quota state                                                                     |                                                            |
-| `POST`   | `/api/account/export`          | Trigger data export job                                                                           | Email delivers the link                                    |
-| `POST`   | `/api/account/delete`          | Trigger account deletion                                                                          | Confirmed via email link                                   |
-| `POST`   | `/api/auth/[[path]]`           | Better Auth handler — sign-in, sign-up, OAuth callbacks, magic-link verification, session refresh | Mounted as a single catch-all by Better Auth               |
-| `POST`   | `/api/webhooks/stripe`         | Stripe webhook receiver                                                                           | Signature-verified                                         |
-| `POST`   | `/api/webhooks/email`          | Email provider events (bounces, complaints)                                                       |                                                            |
-| `GET`    | `/api/health`                  | Liveness                                                                                          | Pings DB + LLM                                             |
+| Method   | Path                                           | Purpose                                                                                           | Notes                                                      |
+| -------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `POST`   | `/api/chats`                                   | Create a chat                                                                                     | Body: `{ name, target_language, prefs? }`                  |
+| `GET`    | `/api/chats`                                   | List chats for current user                                                                       | Pagination cursor                                          |
+| `GET`    | `/api/chats/:id`                               | Fetch a chat with prefs                                                                           |                                                            |
+| `PATCH`  | `/api/chats/:id`                               | Rename / archive / update meta                                                                    |                                                            |
+| `DELETE` | `/api/chats/:id`                               | Soft delete (purged in 30d)                                                                       |                                                            |
+| `GET`    | `/api/chats/:id/messages`                      | Paginated messages                                                                                | Cursor by `created_at`                                     |
+| `POST`   | `/api/chats/:id/messages`                      | Commit a message                                                                                  | Body is a `TranslationObject`; server validates and stores |
+| `GET`    | `/api/chats/:id/messages/:mid`                 | Single message with full version history                                                          |                                                            |
+| `POST`   | `/api/chats/:id/translate`                     | **Streaming.** Outbound translation                                                               | SSE; body `TranslateRequest`                               |
+| `POST`   | `/api/chats/:id/inbound`                       | **Streaming.** Inbound paste translation                                                          | SSE; body `InboundRequest`                                 |
+| `GET`    | `/api/prefs`                                   | Global prefs for current user                                                                     |                                                            |
+| `PUT`    | `/api/prefs`                                   | Update global prefs                                                                               |                                                            |
+| `GET`    | `/api/chats/:id/prefs`                         | Per-chat prefs                                                                                    |                                                            |
+| `PUT`    | `/api/chats/:id/prefs`                         | Update per-chat prefs                                                                             |                                                            |
+| `GET`    | `/api/name-locks`                              | Global name locks                                                                                 |                                                            |
+| `PUT`    | `/api/name-locks`                              | Replace global name locks                                                                         |                                                            |
+| `GET`    | `/api/chats/:id/pref-suggestions`              | List drift-detected suggestions for a chat                                                        | Query `?status=pending\|applied\|dismissed\|kept_both`     |
+| `POST`   | `/api/chats/:id/pref-suggestions/:sid/resolve` | Apply / keep-both / dismiss a suggestion                                                          | Body `{ action: "apply" \| "keep_both" \| "dismiss" }`     |
+| `POST`   | `/api/chats/:id/refresh-context`               | Manually request a hiatus-refresh drift scan                                                      | Auto-fired on first translate after >7 day gap             |
+| `GET`    | `/api/usage`                                   | Today's usage and quota state                                                                     |                                                            |
+| `POST`   | `/api/account/export`                          | Trigger data export job                                                                           | Email delivers the link                                    |
+| `POST`   | `/api/account/delete`                          | Trigger account deletion                                                                          | Confirmed via email link                                   |
+| `POST`   | `/api/auth/[[path]]`                           | Better Auth handler — sign-in, sign-up, OAuth callbacks, magic-link verification, session refresh | Mounted as a single catch-all by Better Auth               |
+| `POST`   | `/api/webhooks/stripe`                         | Stripe webhook receiver                                                                           | Signature-verified                                         |
+| `POST`   | `/api/webhooks/email`                          | Email provider events (bounces, complaints)                                                       |                                                            |
+| `GET`    | `/api/health`                                  | Liveness                                                                                          | Pings DB + LLM                                             |
 
 ### 2.2 Conventions
 
@@ -155,13 +158,14 @@ CREATE TABLE preferences_global (
 );
 
 CREATE TABLE name_locks (
-  id          uuid PRIMARY KEY,                        -- UUIDv7
-  user_id     text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  chat_id     uuid REFERENCES chats(id) ON DELETE CASCADE,  -- null => global lock
-  source_form text NOT NULL,
-  target_form text,                                          -- optional (e.g., explicit kana)
-  notes       text,
-  created_at  timestamptz NOT NULL DEFAULT now()
+  id              uuid PRIMARY KEY,                    -- UUIDv7
+  user_id         text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chat_id         uuid REFERENCES chats(id) ON DELETE CASCADE,  -- null => global lock
+  source_form     text NOT NULL,
+  target_form     text,                                          -- optional (e.g., explicit kana)
+  notes           text,
+  prior_canonical boolean NOT NULL DEFAULT false,                -- true if this name was the chat's canonical contact_name before being replaced via a drift suggestion (see §5.4); enables compose-time hints
+  created_at      timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX idx_name_locks_user_chat ON name_locks(user_id, chat_id);
 
@@ -228,6 +232,30 @@ CREATE TABLE audit_points (
   accepted    boolean,                         -- null = informational only
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+
+-- ─── Preference drift suggestions (in-flow preference updates) ───
+-- Surfaced when the LLM detects identity / formality / context drift in
+-- the conversation (name reveal, nickname offer, register shift,
+-- post-hiatus context update). User confirms before any preference
+-- changes; we never auto-apply. See §5.4 for the detection contract.
+CREATE TABLE pref_suggestions (
+  id                uuid PRIMARY KEY,                  -- UUIDv7
+  chat_id           uuid NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+  user_id           text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  field             text NOT NULL,                     -- contact_name_src | contact_name_tgt | my_nickname | register | naturalness | notes | name_lock_add
+  from_value        jsonb,                             -- current value, null when additive (e.g., name_lock_add)
+  to_value          jsonb NOT NULL,                    -- proposed value
+  evidence_msg_id   uuid REFERENCES messages(id) ON DELETE SET NULL,
+  evidence_excerpt  bytea NOT NULL,                    -- field-level encrypted (carries user content)
+  confidence        text NOT NULL CHECK (confidence IN ('low', 'med', 'high')),
+  reasoning         text NOT NULL,                     -- short user-facing string ("She introduced a different name")
+  category          text NOT NULL CHECK (category IN ('name_reveal', 'nickname_offer', 'register_shift', 'context_update')),
+  status            text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'applied', 'dismissed', 'kept_both')),
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  resolved_at       timestamptz
+);
+CREATE INDEX idx_pref_suggestions_chat_status ON pref_suggestions(chat_id, status, created_at DESC);
+CREATE INDEX idx_pref_suggestions_dedup ON pref_suggestions(chat_id, field, status) WHERE status = 'dismissed';
 
 CREATE TABLE usage_events (
   id            uuid PRIMARY KEY,                      -- UUIDv7
@@ -465,11 +493,32 @@ type TranslationStreamChunk =
   | { type: "dialect"; flags: string[] }
   | { type: "name_check"; name: string; preserved: boolean }
   | { type: "audit_point"; point: AuditPoint }
+  | { type: "prefs_suggestion"; suggestion: PrefsSuggestion } // see §5.4
   | { type: "done" }
   | { type: "error"; code: string; message: string };
+
+type PrefsSuggestion = {
+  id: string; // server-generated, durable (matches pref_suggestions.id)
+  field:
+    | "contact_name_src"
+    | "contact_name_tgt"
+    | "my_nickname"
+    | "register"
+    | "naturalness"
+    | "notes"
+    | "name_lock_add";
+  from: unknown | null; // current value, null when additive
+  to: unknown; // proposed value
+  evidence: { message_id: string; excerpt: string }; // ~80-char snippet from triggering message
+  confidence: "low" | "med" | "high";
+  reasoning: string; // short user-facing string
+  category: "name_reveal" | "nickname_offer" | "register_shift" | "context_update";
+};
 ```
 
 The server fans the LLM's structured tokens out into these chunks. The LLM is asked for JSON; a streaming JSON parser (or Anthropic's native partial-JSON handling) emits chunks as soon as a field stabilises.
+
+`prefs_suggestion` chunks are persisted to `pref_suggestions` server-side as they emit (so a refresh recovers them) and forwarded to the client for inline UI rendering.
 
 ### 5.3 System prompt design
 
@@ -486,11 +535,43 @@ Stored in `packages/prompts` as versioned files. The v1 prompt has these section
 4. **Name locks** — the list, instructions to preserve verbatim.
 5. **Output schema** — strict JSON, fields as in §5.2.
 6. **Recent thread** (when present) — the bilingual conversation slice from §5.1.1, framed as "prior turns for context, do not re-translate."
-7. **Few-shot examples** — 3 pairs covering name preservation, register match, idiom adaptation.
+7. **Drift detection rules** — when and how to emit `prefs_suggestion` chunks; full contract in §5.4.
+8. **Few-shot examples** — 3 pairs covering name preservation, register match, idiom adaptation, plus 2 pairs covering drift detection (name reveal, register shift).
 
-The first three sections are aggressively cached. Per-call context (sections 4–6) is small and changes per call. Few-shot examples (7) sit at the end of the cached prefix.
+The first three sections plus the drift-detection rules and few-shot examples are aggressively cached. Per-call context (sections 4–6) is small and changes per call.
 
-### 5.4 Model routing
+### 5.4 Drift detection contract
+
+The translator is also a drift observer. When the LLM sees evidence in `recent_thread` (or the current message) that a chat preference is stale or incomplete, it emits a `prefs_suggestion` chunk. The user confirms before any preference changes — the system **never auto-applies**.
+
+**Detection categories:**
+
+| Category         | Trigger examples                                                                        | Suggested field                                         |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `name_reveal`    | "実は、本当の名前は美咲です" — explicit introduction of a different name                | `contact_name_src`, `contact_name_tgt`, `name_lock_add` |
+| `nickname_offer` | "Call me Lu" — additive alias offered                                                   | `name_lock_add` (additive; doesn't replace canonical)   |
+| `register_shift` | Sustained drop of `-san`, move to plain form, or symmetric loosening over ≥5 turns      | `register`, `naturalness`                               |
+| `context_update` | Hiatus refresh (§7); explicit context shift ("I started a new job" → role/notes update) | `notes`                                                 |
+
+**Emission rules** (enforced in the prompt):
+
+- **Confidence-tiered.** Only emit `high` for explicit, unambiguous evidence (e.g., direct introduction). `med` for strong inference (sustained register shift). `low` for weak hints (single-turn formality drop). The client surfaces `high` as inline cards; `med` and `low` accumulate in the chat-header badge.
+- **One per call, max.** A single translation call emits at most one `prefs_suggestion` to avoid noise.
+- **Always-additive for names.** Name updates never replace the prior name silently; applying a `contact_name_src/tgt` change always also creates a `name_lock_add` for the previous canonical name so historical messages still resolve.
+- **Evidence required.** Every suggestion carries an `evidence.message_id` + `excerpt` (~80 chars). The client renders this as the "why" line under the suggestion card.
+- **Server-side anti-spam.** Before forwarding a chunk, the server checks `pref_suggestions` for any `(chat_id, field, to_value)` that was `dismissed` within the last 30 days; if found, the chunk is dropped server-side and not surfaced to the client.
+
+**Resolution actions** (`POST /api/chats/:id/pref-suggestions/:sid/resolve`):
+
+- `apply` — write the change to `preferences_chat` (or `name_locks` for `name_lock_add`); set `status = 'applied'`. For canonical-name changes, also auto-add a `name_lock` for the prior name (additive guarantee).
+- `keep_both` — additive only: create a `name_lock` for the new value without changing the canonical name. Status `kept_both`.
+- `dismiss` — set `status = 'dismissed'`. Server uses this to suppress same-suggestion re-emission for 30 days.
+
+**Compose-time hint (client-side, no LLM call).** Independent of the LLM-driven detection above. When the user types an outbound draft, the composer runs a cheap regex over the draft against the chat's current `name_locks`. If a _prior_ canonical name appears (a name that was applied-as-replaced), the composer surfaces a soft inline hint: "Did you mean Misaki?" with one-tap rewrite. Pure client-side; no network call. Implemented in `apps/web/src/lib/compose-hints.ts`.
+
+**Hiatus refresh.** On the first translate or inbound call after a chat has been idle ≥7 days, the orchestrator fires a background Haiku call (`c.executionCtx.waitUntil`) that scans `recent_thread` against current prefs and may emit a single `context_update` suggestion. Doesn't block the foreground translation. UI surfaces this as a soft toast: "It's been 3 weeks. Want to review the tone?" with a one-tap "Yes, refresh" → opens the suggestions panel. Job hook in §7 (`hiatus_context_refresh`).
+
+### 5.5 Model routing
 
 ```
 default (free + paid)   -> Claude Sonnet 4.6
@@ -501,22 +582,22 @@ back-translation        -> Claude Haiku 4.5
 
 **v1 policy:** Sonnet 4.6 for both Free and Pro outbound translations — the JP-nuance bar is the product moat and Free tier is bounded by the daily quota (10/day), not by a cheaper model. A `LLM_FREE_TIER_DOWNGRADE` feature flag is wired up but off by default; flip to Haiku-on-free if costs spike or abuse appears.
 
-### 5.5 Reference-check (back-translation diff)
+### 5.6 Reference-check (back-translation diff)
 
 After the natural pass is finalised on commit, a background task back-translates the natural target text into source-language and computes a diff against the user's draft. Significant divergence flags an audit point retroactively (becomes visible on the message history). Cheap (Haiku); doesn't block the foreground.
 
-### 5.6 Retries and timeouts
+### 5.7 Retries and timeouts
 
 - Provider call timeout: 25s for streaming, 12s for non-streaming.
 - Single retry on `provider_unavailable` (5xx, timeouts) with 500ms backoff.
 - Translation-specific JSON-parse failure: regenerate once with stricter "valid JSON only" instruction.
 
-### 5.7 Idempotency
+### 5.8 Idempotency
 
 - Each translate request includes an `Idempotency-Key`.
 - Server caches `(user_id, idempotency_key)` → response in Redis for 10 minutes; replays return the cached stream from a buffer (or a sentinel "in-flight" if the original is mid-stream).
 
-### 5.8 Cost & token accounting
+### 5.9 Cost & token accounting
 
 - Every LLM call writes a `usage_events` row with `input_tokens`, `output_tokens`, `cached_tokens`, `cost_micro_usd`.
 - Daily roll-up via SQL view (or scheduled materialised view) for the usage UI.
@@ -547,15 +628,16 @@ Two layers:
 
 v1 uses lightweight scheduled jobs via **Cloudflare Cron Triggers** bound to a separate Worker (or to the same Pages project). No queue server.
 
-| Job                      | Cadence                                         | Purpose                                                     |
-| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------- |
-| `back_translation_check` | per-write trigger (server action invokes async) | Reference-check; writes audit points                        |
-| `usage_rollup`           | nightly                                         | Daily/monthly aggregates per user                           |
-| `purge_soft_deleted`     | hourly                                          | Delete soft-deleted chats/messages older than 30d           |
-| `process_export_queue`   | every 5 min                                     | Build JSON archives, upload, email link                     |
-| `process_deletion_queue` | hourly                                          | Hard-delete users whose 30d window elapsed                  |
-| `prompt_cache_warm`      | hourly                                          | Re-issue a cheap call to keep the cached system prompt warm |
-| `health_check_alerts`    | every 5 min                                     | DB ping, LLM ping, alert on failure                         |
+| Job                      | Cadence                                         | Purpose                                                      |
+| ------------------------ | ----------------------------------------------- | ------------------------------------------------------------ |
+| `back_translation_check` | per-write trigger (server action invokes async) | Reference-check; writes audit points                         |
+| `hiatus_context_refresh` | per-call trigger when chat idle ≥7d             | Haiku scan for drift; may emit one `prefs_suggestion` (§5.4) |
+| `usage_rollup`           | nightly                                         | Daily/monthly aggregates per user                            |
+| `purge_soft_deleted`     | hourly                                          | Delete soft-deleted chats/messages older than 30d            |
+| `process_export_queue`   | every 5 min                                     | Build JSON archives, upload, email link                      |
+| `process_deletion_queue` | hourly                                          | Hard-delete users whose 30d window elapsed                   |
+| `prompt_cache_warm`      | hourly                                          | Re-issue a cheap call to keep the cached system prompt warm  |
+| `health_check_alerts`    | every 5 min                                     | DB ping, LLM ping, alert on failure                          |
 
 When voice / date-mode arrives, a real worker (BullMQ on Upstash) replaces these.
 

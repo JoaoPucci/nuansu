@@ -137,6 +137,26 @@ Transitions:
 
 Each state has its own UI affordances; transitions are the only way to change UI mode.
 
+### 6.1 Preference drift suggestions (parallel channel)
+
+`prefs_suggestion` chunks emitted by the translator (see `back_end_architecture.md §5.4`) are a **parallel channel**, not a composer state. They never block translation flow; they accumulate as decorations on committed messages and as items in a chat-header badge.
+
+- The streaming reducer routes `prefs_suggestion` chunks to a separate `usePrefsSuggestionsStore` (Zustand) keyed by `chat_id`. They survive the composer state machine — applying or dismissing one doesn't affect translation.
+- High-confidence suggestions (`confidence: "high"`) render inline as a `SuggestionCard` directly under the triggering message bubble. Medium and low confidence accumulate in a chat-header badge counter; tapping opens a panel listing them with the same actions.
+- The card has three actions: **Apply**, **Keep both** (additive only — `name_lock_add`-only path), **Not now**. Each calls `POST /api/chats/:id/pref-suggestions/:sid/resolve` with the corresponding `action`. On success, optimistic update collapses the card.
+- After a suggestion resolves with `apply` and the resolved field was a canonical name, the chat's `name_locks` query is invalidated so the next outbound translation includes the new + prior lock.
+
+### 6.2 Compose-time hint (client-side, no LLM call)
+
+A pure-client safety net for the case where the user types an outbound mentioning a now-stale canonical name. Implementation: `apps/web/src/lib/compose-hints.ts`.
+
+- On every draft change (debounced 200 ms), run a regex over the draft against the chat's `name_locks` filtered to `prior_canonical: true` (a flag set when a name was applied-as-replaced).
+- On match, render a soft inline hint below the composer input: "Did you mean **Misaki**?" with a one-tap rewrite button.
+- One-tap rewrite is a pure string replace in the draft buffer — no network call, no LLM. The hint dismisses on first interaction (rewrite or close).
+- Hint suppression: once dismissed for a given `(prior_name, new_name)` pair within the current composer session, do not re-show until next chat open.
+
+This layer is independent of the LLM-driven detection in §6.1 and exists because the user editing their own draft shouldn't need to wait for a server round-trip to be reminded.
+
 ## 7. Streaming — `useStreamedTranslation`
 
 A custom hook that owns the streaming lifecycle:
