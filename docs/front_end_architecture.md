@@ -157,6 +157,42 @@ A pure-client safety net for the case where the user types an outbound mentionin
 
 This layer is independent of the LLM-driven detection in §6.1 and exists because the user editing their own draft shouldn't need to wait for a server round-trip to be reminded.
 
+### 6.3 First-run experience — sample chat + coachmarks
+
+The post-onboarding experience (`requirements.md` §5.1 R4a) is split into two pieces: a server-created **sample chat** that the user lands in, and a small set of **just-in-time coachmarks** that fire on first encounter with specific affordances. State lives server-side in `users.onboarding_state` (see `back_end_architecture.md §3.4`).
+
+**`useOnboardingState` hook.** A single TanStack Query hook (`/api/onboarding/state`) loaded once at app shell mount, cached for the session. Drives both the sample-chat banner visibility and the coachmark gating.
+
+**`useCoachmark(id)` hook.** Renders a coachmark if `id` is not in `dismissed_coachmarks` and the trigger condition is met. On dismiss, calls `POST /api/onboarding/dismiss-coachmark` and optimistically updates the cached onboarding state.
+
+```ts
+function useCoachmark(id: CoachmarkId): {
+  shouldShow: boolean;
+  dismiss: () => void;
+};
+```
+
+Trigger wiring lives at the call site (the composer, the audit list, the view toggle, etc.) — the hook only owns the dismissed-set check and the dismiss mutation.
+
+**Coachmark IDs and trigger sites:**
+
+| ID                         | Trigger site                                                     |
+| -------------------------- | ---------------------------------------------------------------- |
+| `composer_first_translate` | `Composer` — fires after first `STREAM_DONE` reducer transition  |
+| `audit_points_first`       | `AuditPointList` — fires when first audit_point appears in state |
+| `view_toggle_first`        | `ViewToggle` — fires on mount when chat has ≥1 message           |
+| `refine_first`             | `Composer` — fires on first transition into `iterating`          |
+
+**Discipline (enforced in code, not just docs):**
+
+- A global `useCoachmarkLock` Zustand atom holds a single optional `activeId`. `useCoachmark` only returns `shouldShow: true` if `activeId === id` _or_ `activeId === null` and we successfully claim the lock. This guarantees at most one coachmark visible at any moment.
+- Dismissals are idempotent server-side and optimistic client-side — re-renders never re-fire a coachmark.
+- After page reload, the server-side `dismissed_coachmarks` is the source of truth; local Zustand state is rehydrated from the query cache.
+
+**`SampleChatBanner`.** Rendered at the top of the chat view when `chat.id === onboarding.sample_chat_id`. Two affordances: a single line of copy (i18n key `onboarding.sample_chat_banner.label`) and a `[Use real chats →]` button that calls `POST /api/onboarding/complete`, then redirects to `/app/chats`. The banner is a structural layout element of the sample chat route, not a toast — it does not animate in, it's just there.
+
+**Sample chat fixture rendering.** The three fixture messages are seeded server-side at onboarding-form submission (see `back_end_architecture.md §3.4`), so the client treats them like any other messages — they land in `messages` with normal `prefs_snapshot`, `model: 'fixture'`, `prompt_version: 'fixture-v1'` markers. The client doesn't need a special render path; the `model: 'fixture'` marker is purely for analytics filtering.
+
 ## 7. Streaming — `useStreamedTranslation`
 
 A custom hook that owns the streaming lifecycle:

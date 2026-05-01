@@ -279,11 +279,69 @@ Soft inline surface below the composer input when the user types a draft mention
 - Background `surface-1` with a 1 px `border-subtle` left edge as an attached strip; no full card chrome — this is a hint, not a card.
 - Enter/exit: 120 ms fade. No slide.
 
-### 7.10 Empty / loading / error states
+### 7.10 Coachmark
+
+Just-in-time tooltip that fires on first encounter with a specific affordance (e.g., the literal/natural split, audit points, view toggle, refine box). See `requirements.md §5.1` R4a and `front_end_architecture.md §6.3`. Strict discipline: at most one visible at any moment; never on a return visit; persisted server-side.
+
+**Anatomy:**
+
+- Small directional callout: a 4 × 4 px caret pointing at the anchor element, plus a rounded card body 280 px wide on mobile, 320 px on desktop.
+- One-line headline in 14 px medium (`text-primary`) — the _what_ ("Two passes: literal and natural").
+- One or two lines of body in 13 px (`text-secondary`) — the _why_ ("Literal stays close to your source; natural reads as a native speaker would say it.").
+- One trailing dismiss affordance: text button `Got it` in `text-primary` medium. No `×` icon — coachmarks are intentionally one-action.
+
+**Surface:**
+
+- Background `surface-2` with 1 px `border-subtle`, 8 px radius (smaller than message bubbles — coachmarks are auxiliary), 12 px padding.
+- Soft drop shadow at elevation token `shadow-popover` (lighter than dialogs, heavier than cards).
+- Caret picks up the same `border-subtle` edge so it reads as a continuous shape.
+
+**Placement:**
+
+- Anchored to the relevant UI element with 8 px offset. Direction (above / below / left / right) chosen at runtime based on viewport space; never overlap the anchor.
+- On mobile, prefer below-anchor with full-width inset of 16 px from screen edges.
+
+**Behaviour:**
+
+- Enters with 180 ms fade + 4 px slide from the anchor direction; respects `prefers-reduced-motion` (fade only).
+- `Got it` calls the dismiss API (idempotent), optimistically updates the cache, and exits with 120 ms fade.
+- Tapping outside the coachmark does **not** dismiss it — coachmarks are intentional, the user must acknowledge by reading and tapping. (Exception: pressing Escape dismisses, for keyboard parity.)
+- Anchor element retains a subtle 2 px outer ring in `accent-subtle` while the coachmark is active, so the eye is led from copy to target.
+
+**A11y:**
+
+- Coachmark is `role="tooltip"` with `aria-live="polite"`; the anchor element gets `aria-describedby` pointing at the coachmark id.
+- Focus is **not** stolen — coachmarks must not interrupt typing or other in-progress actions.
+- Keyboard: Escape dismisses; Tab continues normal page traversal; Enter on the anchor element with a coachmark active also dismisses (so a user navigating by keyboard can acknowledge inline).
+
+**Strict discipline (also enforced in code per `front_end_architecture.md §6.3`):**
+
+- One visible at any moment (global lock).
+- Never re-fires after dismissal — server-side `users.onboarding_state.dismissed_coachmarks` is authoritative.
+- Never used for marketing or feature announcements — coachmarks are reserved for first-run product orientation only.
+
+### 7.11 SampleChatBanner
+
+Thin top-of-chat strip rendered when the user is in their auto-created sample chat (see `requirements.md §5.1` R4a). Frames the experience without being a modal.
+
+- Single line: "Sample chat — try replying to Aiko to see how Nuansu translates" (i18n key, locale-appropriate name for the contact).
+- Trailing button: `Use real chats →` in `text-primary` medium. One tap calls the complete-onboarding API and redirects to the real chat list.
+- Background `accent-subtle` (a soft Aizome wash, 8% opacity), 1 px `border-subtle` bottom edge, 12 px vertical padding, 16 px horizontal.
+- Sticky at the top of the chat scroll container — does not scroll with messages; remains visible until the user dismisses.
+- No close `×` — the dismiss action is the explicit `Use real chats →` button. The user shouldn't be able to silently dismiss the frame and then wonder why this chat is weird.
+- Enter: rendered with the chat view, no animation. Exit: 180 ms fade-out as the redirect navigates away.
+
+**A11y:**
+
+- Banner is `role="region"` with `aria-label="Sample chat introduction"`.
+- The `Use real chats →` button is a real `<button>` with descriptive aria-label.
+- High enough contrast on the `accent-subtle` wash that text remains AA against both light and dark themes.
+
+### 7.12 Empty / loading / error states
 
 Each major view has all three. Empty states explain what to do next. Error states explain _what's wrong_ and _what to try_ — never just a sad face.
 
-### 7.11 Toasts
+### 7.13 Toasts
 
 Reserved for confirmations (Saved, Copied, Deleted) — never for errors. Bottom-centred, 3s, dismissable.
 

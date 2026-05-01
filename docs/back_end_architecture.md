@@ -51,6 +51,9 @@ REST-ish JSON over HTTPS. Hono router mounted at `/api/*` via Cloudflare Pages F
 | `POST`   | `/api/chats/:id/pref-suggestions/:sid/resolve` | Apply / keep-both / dismiss a suggestion                                                          | Body `{ action: "apply" \| "keep_both" \| "dismiss" }`     |
 | `POST`   | `/api/chats/:id/refresh-context`               | Manually request a hiatus-refresh drift scan                                                      | Auto-fired on first translate after >7 day gap             |
 | `GET`    | `/api/usage`                                   | Today's usage and quota state                                                                     |                                                            |
+| `GET`    | `/api/onboarding/state`                        | Current onboarding state for the user                                                             | See §3.4                                                   |
+| `POST`   | `/api/onboarding/dismiss-coachmark`            | Mark a coachmark as seen (idempotent)                                                             | Body `{ coachmark_id: string }`                            |
+| `POST`   | `/api/onboarding/complete`                     | Finalise sample chat (hard-delete, clear sample_chat_id, stamp completed_at)                      |                                                            |
 | `POST`   | `/api/account/export`                          | Trigger data export job                                                                           | Email delivers the link                                    |
 | `POST`   | `/api/account/delete`                          | Trigger account deletion                                                                          | Confirmed via email link                                   |
 | `POST`   | `/api/auth/[[path]]`                           | Better Auth handler — sign-in, sign-up, OAuth callbacks, magic-link verification, session refresh | Mounted as a single catch-all by Better Auth               |
@@ -133,15 +136,16 @@ CREATE TABLE auth_verification_tokens (
 
 -- ─── Application users — product-specific extension of auth_users ───
 CREATE TABLE users (
-  id              text PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
-  display_name    text,
-  source_language text NOT NULL DEFAULT 'en',
-  locale          text NOT NULL DEFAULT 'en',           -- 'en' | 'ja' — drives email templates + JP support routing
-  region          text NOT NULL DEFAULT 'jp',           -- 'jp' | 'us' | 'eu' — drives multi-region routing (architecture.md §10)
-  is_dogfood      boolean NOT NULL DEFAULT false,       -- excludes from product analytics
-  dek_wrapped     bytea,                                -- KMS-wrapped per-user data encryption key
-  created_at      timestamptz NOT NULL DEFAULT now(),
-  deleted_at      timestamptz
+  id                text PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
+  display_name      text,
+  source_language   text NOT NULL DEFAULT 'en',
+  locale            text NOT NULL DEFAULT 'en',         -- 'en' | 'ja' — drives email templates + JP support routing
+  region            text NOT NULL DEFAULT 'jp',         -- 'jp' | 'us' | 'eu' — drives multi-region routing (architecture.md §10)
+  is_dogfood        boolean NOT NULL DEFAULT false,     -- excludes from product analytics
+  dek_wrapped       bytea,                              -- KMS-wrapped per-user data encryption key
+  onboarding_state  jsonb NOT NULL DEFAULT '{"dismissed_coachmarks": []}'::jsonb,  -- see §3.4
+  created_at        timestamptz NOT NULL DEFAULT now(),
+  deleted_at        timestamptz
 );
 
 -- A trigger creates a row in `users` whenever a row is created in `auth_users`.
@@ -344,6 +348,42 @@ The most-read patterns:
   ```
   The Drizzle wrapper sets this from the Hono session; RLS policies read `current_setting('nuansu.user_id', true)`. The app-layer wrapper is the primary control; RLS catches bugs.
 - Better Auth tables (`auth_users`, `auth_sessions`, etc.) are managed by the library and have their own access discipline — never queried directly outside `server/auth.ts`.
+
+### 3.4 Onboarding state
+
+The `users.onboarding_state` jsonb column tracks first-run UX progression. Shape:
+
+```ts
+type OnboardingState = {
+  sample_chat_id?: string; // UUID of the auto-created sample chat (if not yet archived)
+  dismissed_coachmarks: string[]; // stable IDs of coachmarks the user has seen
+  completed_at?: string; // ISO timestamp when user finished or dismissed the sample chat
+};
+```
+
+**Coachmark IDs (stable strings):**
+
+| ID                         | Fires on                                         |
+| -------------------------- | ------------------------------------------------ |
+| `composer_first_translate` | first `STREAM_DONE` in the composer              |
+| `audit_points_first`       | first time an `audit_point` chunk renders        |
+| `view_toggle_first`        | first time the per-chat view toggle is visible   |
+| `refine_first`             | first time the composer enters `iterating` state |
+
+**Lifecycle:**
+
+1. Sign-up → `users` row created with default `onboarding_state = {dismissed_coachmarks: []}`.
+2. User completes the onboarding form (R2) → server creates the **sample chat** in a transaction with three fixture messages (see `requirements.md §5.1` R4a; fixture content lives in `packages/i18n/onboarding.json` per source/target language pair). The new chat's id is written to `onboarding_state.sample_chat_id`. User redirects to that chat, not the empty list.
+3. As the user encounters coachmarks, the client calls `POST /api/onboarding/dismiss-coachmark` which appends the ID to `dismissed_coachmarks` (idempotent — duplicate calls are no-ops).
+4. When the user archives the sample chat OR taps "Use real chats", the client calls `POST /api/onboarding/complete` which clears `sample_chat_id` and stamps `completed_at`. The sample chat is hard-deleted (not soft-deleted — it never had real user content worth retaining).
+
+**API endpoints:**
+
+- `GET /api/onboarding/state` — returns the user's current `onboarding_state`.
+- `POST /api/onboarding/dismiss-coachmark` — body `{ coachmark_id: string }`.
+- `POST /api/onboarding/complete` — finalises the sample chat (hard-deletes it, clears `sample_chat_id`, stamps `completed_at`).
+
+**Sample chat fixture authoring:** the three fixture messages are authored per `(source_lang, target_lang)` pair and live as namespaced i18n entries (`packages/i18n/{locale}/onboarding.json`). v1 supports EN↔JP only; future language pairs require their own fixture set. The fixture must include: a believable proper noun for the contact (Aiko, in JP fixtures), a place name worth a name-lock badge (Shibuya), and a register that reads as informal-but-not-rude for the target locale.
 
 ## 4. Auth — Better Auth in our Worker
 
