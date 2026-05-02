@@ -72,10 +72,20 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       output: {
-        manualChunks: {
-          react: ["react", "react-dom"],
-          router: ["@tanstack/react-router"],
-          query: ["@tanstack/react-query"],
+        // Function form (universally supported across Rollup 3/4/5).
+        // Vite 8 / Rollup 5 dropped the object-form `manualChunks: { name: [pkgs] }`
+        // signature; the function form is the only one that survives.
+        manualChunks(id) {
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "react";
+          }
+          if (id.includes("@tanstack/react-router")) {
+            return "router";
+          }
+          if (id.includes("@tanstack/react-query")) {
+            return "query";
+          }
+          return undefined;
         },
       },
     },
