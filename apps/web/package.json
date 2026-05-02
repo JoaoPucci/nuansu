@@ -73,7 +73,7 @@
     "autoprefixer": "^10.4.20",
     "drizzle-kit": "^0.31.10",
     "jsdom": "^25.0.1",
-    "msw": "^2.7.0",
+    "msw": "^2.14.2",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "size-limit": "^11.1.6",
     "@size-limit/preset-app": "^11.1.6",
