@@ -16,8 +16,10 @@ Quality gates and testing policy: see docs/quality.md.
 - [ ] refactor — internal restructuring; no behaviour change
 - [ ] perf — performance improvement
 - [ ] docs — documentation only
-- [ ] chore — tooling, deps, CI, scaffolding
+- [ ] chore — tooling, scaffolding, misc maintenance
 - [ ] test — adding/improving tests only
+- [ ] build — build-system or dep bump (Dependabot uses this)
+- [ ] ci — CI / workflow / lefthook change
 
 ## Test plan
 
@@ -75,17 +77,6 @@ If UI changed:
 List:
 
 <!-- npm package(s) and one-line justification per package -->
-
-## Quality gates
-
-<!-- Auto-checked by CI. List any that need follow-up. -->
-
-- [ ] `pnpm typecheck` passes
-- [ ] `pnpm lint` passes (sonarjs cognitive ≤ 15, cyclomatic ≤ 12)
-- [ ] `pnpm test` passes (unit + integration)
-- [ ] `pnpm format:check` passes
-- [ ] `pnpm build` succeeds
-- [ ] Pre-commit hooks ran clean (no `--no-verify`)
 
 ## Reviewer agents
 
