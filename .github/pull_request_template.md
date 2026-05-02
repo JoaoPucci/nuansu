@@ -87,6 +87,31 @@ List:
 - [ ] `pnpm build` succeeds
 - [ ] Pre-commit hooks ran clean (no `--no-verify`)
 
+## Reviewer agents
+
+<!--
+Project reviewer subagents live in .claude/agents/. Each is invoked at the end
+of a relevant change and returns a severity-tagged findings report. Tick which
+agents ran and confirm their findings were addressed (or explicitly acknowledged
+in the PR body).
+
+If a change doesn't trigger any reviewer (e.g., docs-only, README, comments),
+tick "N/A".
+
+Full reviewer index in AGENTS.md §3.8.
+-->
+
+- [ ] N/A — change doesn't trigger any reviewer
+- [ ] `design-review` ran (UI changes in `apps/web/src/{components,features,routes,styles}/**`, Tailwind, theme tokens, Ladle stories)
+- [ ] `security-review` ran (auth / crypto / data-handling / route work, env loader, new deps)
+- [ ] `compliance-review` ran (data flows, retention, sub-processors, tracking, consent, legal pages)
+- [ ] `prompt-eval-reviewer` ran (`packages/prompts/**` or LLM fixtures)
+- [ ] `schema-migration-review` ran (`apps/web/server/db/schema.ts` or `drizzle/**`)
+
+If any reviewer surfaced findings that are NOT addressed in this PR, list them with rationale:
+
+<!-- e.g. "design-review flagged inconsistent icon size on chat row — deferred to a follow-up; tracked at private/CHECKPOINT.md" -->
+
 ## AI-assisted?
 
 <!-- Honest answer; helps reviewer calibrate scrutiny on test-as-spec rule, design discipline, and "looks correct but degrades" failure modes. -->

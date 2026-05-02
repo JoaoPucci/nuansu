@@ -140,6 +140,34 @@ A QA doc that says "install dependencies and run tests" is a failed QA doc. The 
 - No `// removed for X` comments — delete is delete. Git remembers.
 - No `// TODO: do this later` for things that should be done now. If it's not done now, file it as a real follow-up.
 
+### 3.8 Project reviewer subagents
+
+The project ships with five **reviewer-shaped** Claude Code subagents in `.claude/agents/` (version-controlled, not gitignored). Each is invoked at the **end of a relevant change**, before the PR opens, and returns a severity-tagged findings report against the documented authority for its area. None of them edit code (Read + Grep + Bash + Glob only) — they are independent reviewers, not builders.
+
+| Agent                     | Triggered by                                                                                                                                      | Authority                                                             |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `design-review`           | UI changes (`apps/web/src/{components,features,routes,styles}/**`, Tailwind config, theme tokens, Ladle stories)                                  | `docs/design_system.md` §1–§11 + this file §4. Folds a11y in.         |
+| `security-review`         | Auth / crypto / data-handling / route work (`apps/web/server/{auth,crypto,db,translation,billing,email,llm}/**`, env loader, new deps)            | `docs/security.md` + `docs/back_end_architecture.md` §3, §3.3, §4, §5 |
+| `compliance-review`       | Data flows, retention, sub-processors, tracking, consent, legal pages. **Explicit no-legal-interpretation scope** — flags `[COUNSEL]` items only. | `docs/compliance.md` + `docs/dpia.md`                                 |
+| `prompt-eval-reviewer`    | `packages/prompts/**` and LLM fixture changes                                                                                                     | `docs/back_end_architecture.md` §5.3, §5.4                            |
+| `schema-migration-review` | `apps/web/server/db/schema.ts` and `drizzle/**`                                                                                                   | `docs/back_end_architecture.md` §3, §12                               |
+
+**Discipline:**
+
+- **Reviewers, not builders.** Builder personas ("you are a senior X who...") usually produce generic output dressed in persona language. The discipline lives in the docs; reviewer agents add **independent perspective + systematic checklist + context isolation**. We don't ship builder agents.
+- **Auto-routed by Claude Code.** When a change matches an agent's description, Claude routes to it. You can also invoke explicitly via the `Agent` tool with the matching `subagent_type`.
+- **End-of-task, not during construction.** Construction is the main session; the reviewer is the final gate.
+- **Read-only by construction.** Tool restriction (Read/Grep/Bash/Glob, no Edit/Write) is enforced in the agent frontmatter. A reviewer that wants to "just fix this real quick" is the wrong shape — file a finding instead.
+- **Cite the doc.** Every finding references the `§X.Y` section that establishes the rule. If the doc is silent, recommend documenting; don't invent rules.
+- **PR template records invocations.** The PR template has a "Reviewer agents" section with a checkbox per agent. Empty when N/A; ticked when the agent ran and findings were addressed.
+
+**Adding / removing / modifying agents:**
+
+- The agent definitions are in `.claude/agents/<name>.md` with YAML frontmatter (`name`, `description`, `tools`).
+- Description is the routing field — be specific about WHEN to invoke.
+- If after a few phases an agent isn't pulling weight, delete the file. No commitment to maintain all five forever.
+- New agent? PR + commit message explaining the failure mode it catches and why existing reviewers don't suffice.
+
 ## 4. Frontend design enforcement
 
 UI work is held to a higher bar than functional correctness. The product's positioning depends on it.
