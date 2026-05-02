@@ -50,7 +50,7 @@
     "tailwind-merge": "^2.6.0",
     "uuidv7": "^1.0.2",
     "vaul": "^1.1.2",
-    "zod": "^3.24.1",
+    "zod": "^4.4.2",
     "@nuansu/schemas": "workspace:*",
     "@nuansu/prompts": "workspace:*",
     "@nuansu/i18n": "workspace:*"
