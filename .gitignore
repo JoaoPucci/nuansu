@@ -69,8 +69,12 @@ drizzle/.tmp/
 storybook-static/
 ladle-static/
 
-# claude code agents directory (per-machine)
-.claude/
+# Claude Code project config: commit shared definitions (agents, commands,
+# skills, settings.json), ignore personal-local overrides.
+.claude/settings.local.json
+.claude/state/
+.claude/cache/
+.claude/.last_session
 
 # Local-only documents — brainstorms, drafts, anything you don't want in the
 # public repo. The folder itself is ignored; files inside it never tracked.
