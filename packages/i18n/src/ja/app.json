@@ -94,9 +94,13 @@
       "other": "その他"
     }
   },
+  "messages": {
+    "copy": {
+      "success": "コピーしました"
+    }
+  },
   "message_bubble": {
     "copy_label": "メッセージをコピー",
-    "copy_success": "コピーしました",
     "history_label": "原文と監査を表示",
     "history_drawer_title": "このメッセージの翻訳履歴",
     "raw_draft_label": "あなたの下書き",
@@ -129,8 +133,10 @@
     "view_toggle_first": "原文、訳文、両方を切り替え — チャットごとに記憶します。",
     "refine_first": "ピンと来ない? 普通の言葉で何を変えたいか教えてください。"
   },
-  "onboarding_app": {
-    "sample_chat_banner": "このサンプルチャットで使い方をご紹介します。いつでもアーカイブできます。",
+  "onboarding": {
+    "sample_chat_banner": {
+      "label": "このサンプルチャットで使い方をご紹介します。いつでもアーカイブできます。"
+    },
     "use_real_chats_cta": "実際のチャットを使う",
     "fixture_message_1": "ねえ、いつ空いてるか教えて?",
     "fixture_message_2": "週末は空いてるよ。何を考えてた?",

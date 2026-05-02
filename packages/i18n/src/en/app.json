@@ -94,9 +94,13 @@
       "other": "Other"
     }
   },
+  "messages": {
+    "copy": {
+      "success": "Copied"
+    }
+  },
   "message_bubble": {
     "copy_label": "Copy message",
-    "copy_success": "Copied",
     "history_label": "Show original and audit",
     "history_drawer_title": "How this message was translated",
     "raw_draft_label": "Your raw draft",
@@ -129,8 +133,10 @@
     "view_toggle_first": "Switch between source, target, or both — your preference per chat.",
     "refine_first": "Not quite right? Tell me what to change in plain language."
   },
-  "onboarding_app": {
-    "sample_chat_banner": "This is a sample chat to show you around. Archive it any time.",
+  "onboarding": {
+    "sample_chat_banner": {
+      "label": "This is a sample chat to show you around. Archive it any time."
+    },
     "use_real_chats_cta": "Use real chats",
     "fixture_message_1": "Hey, can you let me know when you're free?",
     "fixture_message_2": "Sure, I'm free on the weekend. What did you have in mind?",
