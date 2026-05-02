@@ -75,7 +75,7 @@
     "jsdom": "^25.0.1",
     "msw": "^2.14.2",
     "prettier-plugin-tailwindcss": "^0.8.0",
-    "size-limit": "^11.1.6",
+    "size-limit": "^12.1.0",
     "@size-limit/preset-app": "^11.1.6",
     "tailwindcss": "^4.2.4",
     "tsx": "^4.19.2",
