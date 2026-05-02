@@ -23,8 +23,13 @@ updates:
       - "dependencies"
       - "javascript"
     commit-message:
-      prefix: "chore(deps)"
-      prefix-development: "chore(deps-dev)"
+      # Conventional Commits spec recommends `build(deps):` for dependency
+      # bumps (build-system change, not misc chore). `include: scope` makes
+      # Dependabot append (deps) for runtime and (deps-dev) for dev deps.
+      # Don't bake the scope into the prefix — that produces doubled titles
+      # like `chore(deps)(deps): Bump …`.
+      prefix: "build"
+      prefix-development: "build"
       include: "scope"
     groups:
       react-ecosystem:
@@ -80,4 +85,7 @@ updates:
       - "dependencies"
       - "github-actions"
     commit-message:
-      prefix: "chore(ci)"
+      # Workflow Action bumps are CI-specific. Same scope mechanism as the
+      # npm block — `include: scope` adds (deps) automatically.
+      prefix: "ci"
+      include: "scope"
