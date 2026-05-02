@@ -162,15 +162,33 @@ If your UI doesn't feel at home next to those, it's not done.
 
 ### 4.3 What's banned
 
-These cause an immediate request-changes on PR review:
+These cause an immediate request-changes on PR review. Every item here is a known AI-default failure mode — the kind of thing code generators reach for by reflex.
+
+**Visual / chrome:**
 
 - Stock or AI-generated illustrations / hero images
 - Neon or saturated colour outside the audit-point category palette (`docs/design_system.md §4`)
 - Emoji or exclamation marks in product UI
-- Hover-only affordances (everything must be visible by default; touch users have no hover)
 - Generic shadcn defaults shipped as-is — every primitive must be styled to the Aizome palette before use
 - Modals/popovers stacked on modals/popovers
 - Loading states that are just a spinner — every loading state explains what's loading
+- Hover-only affordances (everything must be visible by default; touch users have no hover)
+
+**Motion** (full discipline in `docs/design_system.md §8`):
+
+- Bouncy spring curves — off-brand, reads playful. Use `tween` + `ease-default` instead. Springs are forbidden.
+- Parallax anywhere in product UI — the canonical AI-default move; expensive on mobile and reads as "look how clever I am." Out.
+- Animations longer than 320 ms in product UI — if you need longer, you're trying to compensate for a slow load; fix the load instead.
+- Animating layout properties (`width`, `height`, `top`, `left`, `padding`) — animate `transform` and `opacity` only. Layout animation triggers reflow and jank.
+- Decorative micro-animations on every hover — motion encodes meaning, never decoration.
+
+**Desktop ports of mobile patterns** (full discipline in `docs/design_system.md §11.2`):
+
+- Bottom sheets on desktop — mobile pattern. Use a popover, modal, or slide-over.
+- Hamburger menus as primary nav on desktop — the chat-list rail is always visible from `lg` upward.
+- 44 px+ tap targets used everywhere on desktop — the mobile floor as the desktop default looks wasteful and unconfident. Use 32–36 px for compact desktop actions (icon buttons, table rows).
+- Locking layouts to narrow widths "for breathing room" on wide screens — let the layout breathe to 1280 px+ with the documented multi-pane discipline.
+- Mobile-only swipe gestures without keyboard / right-click equivalents — every swipe-archive must have both a button and a right-click menu equivalent.
 
 ### 4.4 Process for UI work
 
