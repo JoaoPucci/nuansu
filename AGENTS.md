@@ -106,6 +106,7 @@ If you can change behaviour without changing a doc, the doc was incomplete. Fix 
 - One commit per logical change. Conventional-commit prefixes: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`.
 - A commit message body explains _why_, not _what_ (the diff shows what). Reference the relevant doc section that motivated the change.
 - Phase commits (Phase 1 → 8 in the implementation plan) are larger and follow the per-phase deliverable list.
+- **Stage files explicitly. Never `git add .`, `git add -A`, `git add -u`, or `git add ./*`.** Always pass the specific paths you intend to commit (`git add path/to/file1 path/to/file2`). Reason: blanket staging silently picks up unrelated work-in-progress, orphan test artifacts left behind by QA runs (e.g., `__test_*.ts` files), local IDE state that escaped `.gitignore`, accidental `.env`-shaped files, and AI-generated debug fixtures. Every one of these has happened in real projects and has shipped credentials or broken builds. Explicit paths force the discipline of `git status` → confirm the intended set → stage that set. If you find yourself reaching for `.` because the list is long, that's a signal the commit is doing too much — split it.
 
 ### 3.6 Per-phase QA documents
 
