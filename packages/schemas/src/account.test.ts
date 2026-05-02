@@ -43,6 +43,29 @@ describe("UserSchema", () => {
     ).toBeTruthy();
   });
 
+  it("preserves onboarding_state.completed_at on round-trip (back_end §3.4 lifecycle step 4)", () => {
+    const parsed = UserSchema.parse({
+      ...valid,
+      onboarding_state: {
+        dismissed_coachmarks: [],
+        completed_at: VALID_ISO_TS,
+      },
+    });
+    expect(parsed.onboarding_state.completed_at).toBe(VALID_ISO_TS);
+  });
+
+  it("rejects non-ISO completed_at in onboarding_state", () => {
+    expect(() =>
+      UserSchema.parse({
+        ...valid,
+        onboarding_state: {
+          dismissed_coachmarks: [],
+          completed_at: "yesterday",
+        },
+      }),
+    ).toThrow();
+  });
+
   it("rejects malformed email", () => {
     expect(() => UserSchema.parse({ ...valid, email: "not-an-email" })).toThrow();
   });

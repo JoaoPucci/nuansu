@@ -16,7 +16,9 @@ export const RegionSchema = z.enum(["jp", "us", "eu"]);
 export const OnboardingStateSchema = z.object({
   sample_chat_id: UuidV7Schema.optional(),
   dismissed_coachmarks: z.array(z.string()),
-  // Forward-compat: jsonb may carry future fields; allow + strip unknowns.
+  // ISO timestamp stamped when the user archives the sample chat or taps
+  // "Use real chats" (back_end §3.4 lifecycle step 4). Absent until completion.
+  completed_at: z.iso.datetime().optional(),
 });
 
 export type OnboardingState = z.infer<typeof OnboardingStateSchema>;
