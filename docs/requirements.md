@@ -40,7 +40,7 @@ Secondary personas (kept in mind, not prioritised in v1 UI):
 9. **Per-chat preferences** — overrides for tone, nickname for me, nickname for them, register, naturalness, custom notes the LLM should respect ("uses Kansai-ben", "no emoji", "she's my coworker").
 10. **Account management** — profile, billing, data export, account deletion.
 11. **Subscription billing** — free tier with daily quota, paid tier with higher/uncapped quota.
-12. **Mobile-first responsive web app** — installable as a PWA. Same UI scales beautifully to desktop.
+12. **Dual-target responsive web app, installable as a PWA.** Mobile and desktop are both first-class targets, not one a port of the other. The layout is mobile-first as an _engineering_ strategy (so it gracefully scales to all sizes by construction); the experience is dual-target — mobile leans into chat-shaped immediacy, touch gestures, and on-the-go ergonomics; desktop leans into keyboard-first navigation, density, multi-pane layout, hover affordances, and right-click menus. Per-platform discipline in [`design_system.md §11`](./design_system.md).
 
 ### Out of scope for v1 (roadmap)
 
@@ -170,11 +170,15 @@ This is the centrepiece. The flow has four states:
 - p50 outbound translation first-token ≤ 1.2s.
 - Streaming responses; no blocking spinners over 1s without progress feedback.
 
-### 6.2 Mobile-first
+### 6.2 Dual-target (mobile + desktop)
 
-- Designed at iPhone 13/14 viewport first; tested on Android mid-range; scales to iPad and desktop.
-- Touch targets ≥ 44pt; no hover-only affordances.
-- Installable PWA with offline shell and a "you're offline" banner — outbound translation requires network.
+Mobile and desktop are both first-class targets. Mobile-first is the layout strategy (so layout works at every size by construction); the per-platform experience disciplines are different. Full per-platform spec in [`design_system.md §11`](./design_system.md).
+
+- **Layout designed at iPhone 13/14 viewport first** (375 px); tested on Android mid-range; scales to iPad, then to desktop with explicit gains (see below).
+- **Mobile experience:** touch targets ≥ 44 pt; no hover-only affordances for first-class actions; bottom-sheet for panels under `md`; safe-area padding; haptics on commit / accept-audit-point; swipe gestures backed by button equivalents.
+- **Desktop experience:** keyboard-first navigation (Cmd-K command palette, every action shortcut-reachable, `?` keymap modal); higher density (chat-list rows ~44 px vs 56 px on mobile, body text bumps to `text-md`); multi-pane layout (left rail 280–320 px / main / pinnable right rail from `xl`); hover affordances; right-click context menus; tap-target minimum drops to 32–36 px for compact actions.
+- **Banned on desktop:** bottom sheets, hamburger menus as primary nav, mobile-sized 44 px+ tap targets used everywhere, locking layouts to narrow widths, swipe gestures without keyboard / right-click equivalents.
+- **Installable PWA** with offline shell and a "you're offline" banner — outbound translation requires network.
 
 ### 6.3 Accessibility
 

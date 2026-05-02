@@ -7,7 +7,7 @@ This doc sets the design language and component patterns. It pairs with `front_e
 1. **Calm, never chatty.** The app handles intimate communication; a yelling UI feels invasive. Default volume is low. Flourish lives in motion, not in colour or copy.
 2. **Audit over magic.** Every AI suggestion is shown, sourced, and dismissable. We never hide what the model did.
 3. **Two languages, one moment.** When both languages are visible, the layout makes them peers — not a primary with a translation appended.
-4. **Mobile-first, but desktop is a pleasure.** Density and information increase on desktop; structure stays the same so muscle memory transfers.
+4. **Mobile-first layout, desktop-native experience.** Mobile-first is an _engineering_ strategy (the layout gracefully scales to all sizes, working everywhere by construction); it is not a UX strategy. Desktop is a primary first-class target, not a scaled-up mobile port — keyboard-first ergonomics, density, hover affordances, multi-pane layouts, right-click menus. Same components, same interaction model; each platform leans into its own strengths. The product feels at home on a 27" monitor and on a 6" phone, and like neither port of the other. Full per-platform discipline in §11.
 5. **Quiet feedback.** State changes prefer subtle motion and inline indicators over toasts and modals.
 
 ## 2. Reference apps
@@ -535,7 +535,13 @@ Implementation: a single `useReducedMotion()` hook from Framer Motion exposes th
 - Language attributes (`lang="ja"`, `lang="ko"`) on translated content for correct screen-reader pronunciation.
 - Touch targets ≥ 44x44 pt; primary actions ≥ 48x48 pt.
 
-## 11. Mobile patterns
+## 11. Platform patterns
+
+Mobile and desktop are **both first-class targets**, not one a port of the other. The mobile-first layout strategy (per §1, §6.3) means the layout works at every size by construction; the per-platform discipline below is what makes each _feel native_ rather than scaled.
+
+The reference apps in §2 carry both bars: Linear (desktop keyboard ergonomics + density) and Telegram (mobile chat smoothness + tap targets) are the dual frame. If the mobile build feels like a desktop site shrunk, or the desktop build feels like a phone app stretched, it's not done.
+
+### 11.1 Mobile patterns
 
 - **Bottom-sheet** for preferences and settings panels under `md`.
 - **Swipe** gestures for: archive a chat (left swipe), toggle a single message's language (right swipe). Always backed by a button equivalent.
@@ -543,6 +549,34 @@ Implementation: a single `useReducedMotion()` hook from Framer Motion exposes th
 - **Safe-area** padding throughout; no content under the home indicator or notches.
 - **Composer keyboard handling.** When the keyboard opens, the chat list scrolls so the latest message is just above the composer. The composer never jumps when the candidate panel appears.
 - **Haptics.** Subtle haptic on commit and on accept-audit-point (iOS Safari and Android — feature-detect).
+- **Tap target minimum:** 44 × 44 px for any interactive element under `md`. iOS HIG / Material both expect this.
+
+### 11.2 Desktop patterns
+
+The founder's primary use is desktop. The bar is **Linear / Raycast / Cron / Granola** — all unmistakably desktop-shaped, with keyboard ergonomics, density, and information richness their mobile counterparts don't carry. If the desktop build looks like an upscaled phone app, it's wrong.
+
+What desktop _gains_ over mobile:
+
+- **Keyboard-first navigation.** Every action reachable by keyboard. Cmd-K command palette (lands in Phase 5+). Documented shortcuts for: switch chat, toggle view (source/both/target), copy translation, refine, commit, open preferences, archive. Every shortcut surfaces in a `?` keymap modal and in tooltips.
+- **Density.** Denser than mobile by design. Chat list rows ~44 px desktop vs 56 px mobile. Settings forms tighter line-height. Body text bumps to `text-md` from `text-base` (per §5.3) — denser scanning, more chats above the fold, more thread visible without scroll.
+- **Multi-pane discipline.** Three panes from `xl` (1280 px+): left rail (chat list, 280–320 px) · main panel (chat / settings / usage) · right rail (preferences slide-over, pinnable open from `xl` upward). At `lg`–`xl` (1024–1279 px), right rail folds away unless explicitly opened. Below `lg`, the chat-list rail folds to a top-tab bar (mobile pattern, not the same product).
+- **Hover affordances.** Hover states for every interactive element. Hover-reveal acceptable for genuinely-secondary actions (chat-list row "more options" three-dot menu) but **never** for first-class actions like copy (per §7.1, always-visible).
+- **Right-click context menus.** Desktop users expect them. Already specced for copy on `MessageBubble` (§7.1); apply consistently — chat-list row right-click opens "Rename / Archive / Delete"; message-bubble right-click opens copy variants.
+- **Window-chrome respect.** PWA install on macOS gets a custom title-bar drag region (CSS `app-region: drag` on the header band). Don't paint a fake nav bar that imitates a browser. Honour native window-management gestures (double-click title to maximize / restore).
+- **Resize at all sizes from 1024 px up.** Don't lock to a narrow column "for breathing room." A chat that uses 60% of a 27" monitor with vast empty margins is wrong. Let the chat list breathe to 320 px, the main panel to whatever's left up to a ~720 px reading-line-length cap (so JP/EN long lines stay readable), the right rail to 360 px when pinned.
+- **Tab / keyboard navigation discipline.** Logical tab order top-to-bottom, left-to-right. Focus rings always visible (per §7.x focus styles). Escape closes popovers and modals. Arrow keys navigate lists (chat list, audit point list, suggestion-card menu).
+- **Tap target minimum drops to 32–36 px** for compact desktop actions (icon buttons, table rows) — the mobile 44 px floor is wasteful here and reads as unconfident.
+
+**Banned on desktop** (request-changes on PR review):
+
+- **Bottom sheets.** Mobile pattern. On desktop, use a popover, modal, or slide-over.
+- **Hamburger menus** as primary nav. Mobile pattern. The chat-list rail is always visible on desktop from `lg` upward.
+- **44 px+ tap targets used everywhere.** Looks wasteful and unconfident on desktop. Use the smaller 32–36 px range for icon buttons and table rows.
+- **Mobile-only swipe gestures with no desktop equivalent.** Every swipe-archive must have a button or right-click menu equivalent (the rule in §11.1 already requires this; this re-states it for the desktop side).
+- **Locking layouts to a narrow viewport.** A 27" monitor with the app pinned to 720 px and vast margin is wrong. Let it breathe.
+- **Modal-on-modal stacking** to substitute for desktop's natural multi-pane support. If you need two layers visible, use the slide-over rail or a popover, not a stacked dialog.
+
+The product feels _different_ on desktop: dense, keyboard-driven, multi-pane, hover-rich. Same components, same interaction model, same brand voice — but each component knows when it's on desktop and adapts its affordances accordingly.
 
 ## 12. Marketing site
 
