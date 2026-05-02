@@ -1,6 +1,6 @@
 {
   "name": "@nuansu/prompts",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
@@ -12,5 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "build": "echo 'no build (TS source consumed directly)'"
+  },
+  "dependencies": {
+    "@nuansu/schemas": "workspace:*"
   }
 }

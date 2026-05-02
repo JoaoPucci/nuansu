@@ -261,7 +261,11 @@ importers:
 
   packages/i18n: {}
 
-  packages/prompts: {}
+  packages/prompts:
+    dependencies:
+      '@nuansu/schemas':
+        specifier: workspace:*
+        version: link:../schemas
 
   packages/schemas:
     dependencies:

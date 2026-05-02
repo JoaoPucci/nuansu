@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CACHED_PREFIX_V1 — byte stability > has a stable SHA-256 (regression check) 1`] = `"55f813f402263f8d4af7fb901d499254d94b4c1dadd034445716a710174a920b"`;
