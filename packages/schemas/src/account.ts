@@ -32,7 +32,7 @@ export const OnboardingStateSchema = z.object({
   dismissed_coachmarks: z.array(CoachmarkIdSchema),
   // ISO timestamp stamped when the user archives the sample chat or taps
   // "Use real chats" (back_end §3.4 lifecycle step 4). Absent until completion.
-  completed_at: z.iso.datetime().optional(),
+  completed_at: z.iso.datetime({ offset: true }).optional(),
 });
 
 export type OnboardingState = z.infer<typeof OnboardingStateSchema>;
@@ -47,8 +47,8 @@ export const UserSchema = z.object({
   region: RegionSchema,
   is_dogfood: z.boolean(),
   onboarding_state: OnboardingStateSchema,
-  created_at: z.iso.datetime(),
-  deleted_at: z.iso.datetime().nullable(),
+  created_at: z.iso.datetime({ offset: true }),
+  deleted_at: z.iso.datetime({ offset: true }).nullable(),
 });
 
 export type User = z.infer<typeof UserSchema>;
@@ -72,8 +72,8 @@ export const SubscriptionSchema = z.object({
   stripe_subscription_id: z.string().nullable(),
   status: SubscriptionStatusSchema,
   plan: SubscriptionPlanSchema,
-  trial_ends_at: z.iso.datetime().nullable(),
-  current_period_end: z.iso.datetime().nullable(),
+  trial_ends_at: z.iso.datetime({ offset: true }).nullable(),
+  current_period_end: z.iso.datetime({ offset: true }).nullable(),
   cancel_at_period_end: z.boolean(),
 });
 
@@ -96,7 +96,7 @@ export const UsageEventSchema = z.object({
   cached_tokens: z.number().int().nonnegative(),
   cost_micro_usd: z.number().int().nonnegative(),
   request_id: z.string().min(1),
-  created_at: z.iso.datetime(),
+  created_at: z.iso.datetime({ offset: true }),
 });
 
 export type UsageEvent = z.infer<typeof UsageEventSchema>;

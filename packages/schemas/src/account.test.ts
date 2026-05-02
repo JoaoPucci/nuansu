@@ -3,6 +3,10 @@ import { CoachmarkIdSchema, SubscriptionSchema, UsageEventSchema, UserSchema } f
 
 const VALID_UUIDV7 = "018f7c9a-3b4c-7d8e-9a0b-1c2d3e4f5061";
 const VALID_ISO_TS = "2026-05-03T12:34:56.000Z";
+// Postgres timestamptz columns serialize with explicit timezone offsets
+// through most drivers (e.g., `2026-05-03T21:34:56+09:00` for JST).
+// Schemas accept both Z and offset forms — see {offset:true} on z.iso.datetime.
+const VALID_ISO_TS_OFFSET = "2026-05-03T21:34:56+09:00";
 
 describe("UserSchema", () => {
   const valid = {
@@ -92,6 +96,21 @@ describe("UserSchema", () => {
   it("rejects non-ISO created_at", () => {
     expect(() => UserSchema.parse({ ...valid, created_at: "yesterday" })).toThrow();
   });
+
+  it("accepts ISO timestamps with explicit timezone offsets (Postgres timestamptz)", () => {
+    const parsed = UserSchema.parse({
+      ...valid,
+      created_at: VALID_ISO_TS_OFFSET,
+      deleted_at: VALID_ISO_TS_OFFSET,
+      onboarding_state: {
+        dismissed_coachmarks: [],
+        completed_at: VALID_ISO_TS_OFFSET,
+      },
+    });
+    expect(parsed.created_at).toBe(VALID_ISO_TS_OFFSET);
+    expect(parsed.deleted_at).toBe(VALID_ISO_TS_OFFSET);
+    expect(parsed.onboarding_state.completed_at).toBe(VALID_ISO_TS_OFFSET);
+  });
 });
 
 describe("SubscriptionSchema", () => {
@@ -136,6 +155,16 @@ describe("SubscriptionSchema", () => {
   it("rejects unknown plan", () => {
     expect(() => SubscriptionSchema.parse({ ...valid, plan: "enterprise" })).toThrow();
   });
+
+  it("accepts trial_ends_at and current_period_end with timezone offsets", () => {
+    expect(
+      SubscriptionSchema.parse({
+        ...valid,
+        trial_ends_at: VALID_ISO_TS_OFFSET,
+        current_period_end: VALID_ISO_TS_OFFSET,
+      }),
+    ).toBeTruthy();
+  });
 });
 
 describe("UsageEventSchema", () => {
@@ -177,6 +206,10 @@ describe("UsageEventSchema", () => {
 
   it("rejects unknown kind", () => {
     expect(() => UsageEventSchema.parse({ ...valid, kind: "back_translate" })).toThrow();
+  });
+
+  it("accepts created_at with timezone offset", () => {
+    expect(UsageEventSchema.parse({ ...valid, created_at: VALID_ISO_TS_OFFSET })).toBeTruthy();
   });
 });
 
