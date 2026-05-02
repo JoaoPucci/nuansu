@@ -74,7 +74,7 @@
     "drizzle-kit": "^0.31.10",
     "jsdom": "^25.0.1",
     "msw": "^2.7.0",
-    "prettier-plugin-tailwindcss": "^0.6.9",
+    "prettier-plugin-tailwindcss": "^0.8.0",
     "size-limit": "^11.1.6",
     "@size-limit/preset-app": "^11.1.6",
     "tailwindcss": "^4.2.4",
