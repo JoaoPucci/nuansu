@@ -19,7 +19,7 @@
     "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.92.0",
     "@hono/node-server": "^2.0.1",
     "@hono/zod-validator": "^0.7.6",
     "@noble/ciphers": "^1.1.3",
