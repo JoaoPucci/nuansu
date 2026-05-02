@@ -132,14 +132,5 @@
     "audit_points_first": "すべての意味のある変更はここに表示されます。受け入れるか却下するか、理由を読むだけでもOK。",
     "view_toggle_first": "原文、訳文、両方を切り替え — チャットごとに記憶します。",
     "refine_first": "ピンと来ない? 普通の言葉で何を変えたいか教えてください。"
-  },
-  "onboarding": {
-    "sample_chat_banner": {
-      "label": "このサンプルチャットで使い方をご紹介します。いつでもアーカイブできます。"
-    },
-    "use_real_chats_cta": "実際のチャットを使う",
-    "fixture_message_1": "ねえ、いつ空いてるか教えて?",
-    "fixture_message_2": "週末は空いてるよ。何を考えてた?",
-    "fixture_message_3": "実際のチャットを試してみますか?"
   }
 }

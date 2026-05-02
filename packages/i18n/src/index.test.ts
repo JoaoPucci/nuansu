@@ -43,8 +43,8 @@ describe("@nuansu/i18n — package surface", () => {
     expect(SUPPORTED_LOCALES).toEqual(["en", "ja"]);
   });
 
-  it("ships the 4 documented namespaces", () => {
-    expect(NAMESPACES).toEqual(["common", "marketing", "auth", "app"]);
+  it("ships the 5 documented namespaces", () => {
+    expect(NAMESPACES).toEqual(["common", "marketing", "auth", "app", "onboarding"]);
   });
 
   it("exposes a stable package version", () => {
@@ -79,6 +79,37 @@ describe("@nuansu/i18n — value discipline", () => {
         expect(empty).toEqual([]);
       });
     }
+  }
+});
+
+describe("@nuansu/i18n — onboarding fixture signals (back_end §3.4)", () => {
+  // back_end §3.4: "the fixture must include: a believable proper noun
+  // for the contact (Aiko, in JP fixtures), a place name worth a
+  // name-lock badge (Shibuya), and a register that reads as
+  // informal-but-not-rude for the target locale." The Aiko + Shibuya
+  // signals are what exercise the documented anti-drift demonstration
+  // (name preservation + place-name lock) in the first-run sample chat.
+  for (const locale of SUPPORTED_LOCALES) {
+    it(`'${locale}.onboarding.fixtures': contains the 'Aiko' contact-name signal`, () => {
+      const fixtureValues = [...collectValuesByPath(resources[locale].onboarding).values()].join(
+        "\n",
+      );
+      expect(fixtureValues).toMatch(/Aiko/);
+    });
+
+    it(`'${locale}.onboarding.fixtures': contains the 'Shibuya' place-name signal`, () => {
+      const fixtureValues = [...collectValuesByPath(resources[locale].onboarding).values()].join(
+        "\n",
+      );
+      expect(fixtureValues).toMatch(/Shibuya/);
+    });
+
+    it(`'${locale}.onboarding.fixtures': ships exactly 3 fixture messages`, () => {
+      const fixtures = (resources[locale].onboarding as { fixtures: Record<string, unknown> })
+        .fixtures;
+      const messageKeys = Object.keys(fixtures).filter((k) => k.startsWith("message_"));
+      expect(messageKeys).toHaveLength(3);
+    });
   }
 });
 

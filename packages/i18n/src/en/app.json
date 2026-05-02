@@ -132,14 +132,5 @@
     "audit_points_first": "Every meaningful change shows up here. Accept, reject, or just read why.",
     "view_toggle_first": "Switch between source, target, or both — your preference per chat.",
     "refine_first": "Not quite right? Tell me what to change in plain language."
-  },
-  "onboarding": {
-    "sample_chat_banner": {
-      "label": "This is a sample chat to show you around. Archive it any time."
-    },
-    "use_real_chats_cta": "Use real chats",
-    "fixture_message_1": "Hey, can you let me know when you're free?",
-    "fixture_message_2": "Sure, I'm free on the weekend. What did you have in mind?",
-    "fixture_message_3": "Want to try a real chat?"
   }
 }
