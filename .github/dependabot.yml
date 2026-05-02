@@ -1,0 +1,83 @@
+# Dependabot configuration. Schema: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# Weekly cadence on Monday 09:00 Asia/Tokyo so PRs land at the start of the
+# work week, not Friday afternoon. Grouped by ecosystem so common-release
+# weeks open one PR per group rather than ten. Major versions are NOT
+# ignored — Dependabot opens them as separate PRs from minors, and our
+# CI gates surface incompatibilities (cf. wrangler 3 → 4 in `b44ab3d`,
+# which was caught locally and would have been caught by Dependabot CI
+# the same way).
+
+version: 2
+updates:
+  # ─── pnpm / npm dependencies ───────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 8
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+      include: "scope"
+    groups:
+      react-ecosystem:
+        patterns:
+          - "react*"
+          - "@tanstack/*"
+          - "react-hook-form"
+          - "zustand"
+      eslint-ecosystem:
+        patterns:
+          - "eslint*"
+          - "@eslint/*"
+          - "@typescript-eslint/*"
+          - "typescript-eslint"
+          - "prettier*"
+      vite-ecosystem:
+        patterns:
+          - "vite*"
+          - "vitest*"
+          - "@vitest/*"
+          - "@vitejs/*"
+      tailwind-ecosystem:
+        patterns:
+          - "tailwindcss*"
+          - "@tailwindcss/*"
+          - "prettier-plugin-tailwindcss"
+      cloudflare-ecosystem:
+        patterns:
+          - "wrangler"
+          - "@cloudflare/*"
+      drizzle-ecosystem:
+        patterns:
+          - "drizzle*"
+      hono-ecosystem:
+        patterns:
+          - "hono*"
+          - "@hono/*"
+          - "better-auth"
+      types-ecosystem:
+        patterns:
+          - "@types/*"
+
+  # ─── GitHub Actions ────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 4
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
