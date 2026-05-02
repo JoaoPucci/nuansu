@@ -105,6 +105,43 @@ These have been considered and **explicitly excluded from v1 scope**. They're ca
 
 **Don't accidentally do this in v1** by exposing provider choice in the UI. Keep the model selection server-side and not user-facing.
 
+### Native iOS + Native Android + Web (instead of PWA)
+
+**v1 decision: not shipping.** Pinned to PWA-first via `vite-plugin-pwa` per [`architecture.md §7`](./architecture.md) and [`front_end_architecture.md §12`](./front_end_architecture.md). Native apps remain a roadmap item per [`architecture.md §11`](./architecture.md).
+
+**Why not in v1:**
+
+- **3× engineering surface** for the same product (web + iOS + Android), 3× release cycles (web push vs. App Store review vs. Play Store review), 3× test matrices (Playwright + XCUITest + Espresso). For a solo founder, this turns the v1 timeline from "ship and validate" into "ship three times before any user signal." Realistic delay: 4–6 months.
+- **The "shared logic" problem is mostly unsolved in practice.** React Native, Kotlin Multiplatform, and Flutter all ship with caveats; you still write platform-specific code for anything that matters (composer text input, IME handling, native sheets), and RN-Web is mediocre, so a separate web codebase remains.
+- **The product's moat is prompt engineering + audit UX + the anti-drift thesis.** None of those need native. Reference apps in `design_system.md §2` (Linear, Granola, Cron) all clear the polish bar via web-shaped technology.
+- **Pre-PMF native investment burns the runway needed to find PMF.** Same translation flow built three times before any real user signal is the textbook over-engineering trap.
+- **App Store gatekeeping risk.** Apple has rejected translation apps for assorted reasons; bug fixes via store review take days. Web deploys take seconds.
+
+**Why this question is real (the case for native exists):**
+
+- iOS/Android keyboards and Japanese IMEs are meaningfully better natively. The composer is the centerpiece; text input is THE primary interaction.
+- App Store presence carries discoverability + trust weight, especially in JP (high app-store affinity).
+- Native push, biometric auth, secure enclave for credentials.
+- Founder is a native Android dev — the skill exists.
+
+The instinct is correct that polish _can_ be higher natively. The judgment is that the polish gain is not worth the cost in v1.
+
+**Does v1 architecture preclude native later?** No. [`architecture.md §11`](./architecture.md) explicitly says "Native apps consume the existing API. Auth via the same provider." The Hono API is platform-agnostic, the Better Auth client SDK has native bindings, the schemas are shared via `packages/schemas/`. Going native later is a re-implementation of the UI, not a re-architecture.
+
+**Staged roadmap (when demand surfaces):**
+
+1. **v1: PWA, as planned.** Ship the product, validate the thesis, get real users on real phones. PWA on iOS 16.4+ is genuinely usable.
+2. **v1.5 (~2–4 weeks post-launch): Capacitor wrapper.** Wrap the PWA in a native shell to get App Store / Play Store presence, native push, biometric auth. Same codebase. Captures most of the App Store benefit (badge, install button, store discoverability) at <10% of the native rewrite cost. Especially relevant for the JP-market app-store-affinity wrinkle.
+3. **v2 (only if signal warrants): native composer module or full native rewrite.** Trigger conditions, all three required:
+   - Capacitor-wrapped composer can't deliver the JP-IME polish needed.
+   - Real user feedback says "the typing experience is what's holding me back" (not just hypothetical).
+   - Revenue exists to fund the rewrite without burning runway.
+     At that point, a hybrid approach (Capacitor wrapper + native composer module) is cheaper than a full native rewrite.
+
+**The JP-market wrinkle, separately weighted:** JP consumers genuinely prefer App Store presence and trust it more than web apps. **But** that's an acquisition / distribution argument, not a UX-quality argument — and it's solved by the v1.5 Capacitor wrapper, not a native rewrite. The wrapper gets you in the store; the user can't tell from the store listing that the app is web-shaped.
+
+**Don't accidentally do this in v1** by starting parallel native scaffolds, by adding React Native or Kotlin to dependencies, or by designing components in a way that requires native (e.g., depending on native sheets that PWA can't replicate). Stick to web-shaped patterns; the Capacitor wrapper later inherits them all.
+
 ## Adding new questions
 
 If a new genuinely-unresolved question surfaces during implementation, add it under a "New open questions" heading at the bottom of this doc. Don't duplicate questions that already have an answer in another doc — just link to that doc instead.
