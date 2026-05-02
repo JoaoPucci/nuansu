@@ -13,9 +13,23 @@ import { UuidV7Schema } from "./common.js";
 export const LocaleSchema = z.enum(["en", "ja"]);
 export const RegionSchema = z.enum(["jp", "us", "eu"]);
 
+// Coachmark IDs — fixed set per back_end §3.4. Adding a new coachmark
+// requires updating this enum AND the trigger that fires it (front_end
+// §6.3); both land in the same PR. The strict enum rejects typos and
+// stale IDs at the API boundary instead of silently persisting them
+// (which would re-fire the coachmark on every session).
+export const CoachmarkIdSchema = z.enum([
+  "composer_first_translate",
+  "audit_points_first",
+  "view_toggle_first",
+  "refine_first",
+]);
+
+export type CoachmarkId = z.infer<typeof CoachmarkIdSchema>;
+
 export const OnboardingStateSchema = z.object({
   sample_chat_id: UuidV7Schema.optional(),
-  dismissed_coachmarks: z.array(z.string()),
+  dismissed_coachmarks: z.array(CoachmarkIdSchema),
   // ISO timestamp stamped when the user archives the sample chat or taps
   // "Use real chats" (back_end §3.4 lifecycle step 4). Absent until completion.
   completed_at: z.iso.datetime().optional(),

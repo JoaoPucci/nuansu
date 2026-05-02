@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SubscriptionSchema, UsageEventSchema, UserSchema } from "./account.js";
+import { CoachmarkIdSchema, SubscriptionSchema, UsageEventSchema, UserSchema } from "./account.js";
 
 const VALID_UUIDV7 = "018f7c9a-3b4c-7d8e-9a0b-1c2d3e4f5061";
 const VALID_ISO_TS = "2026-05-03T12:34:56.000Z";
@@ -41,6 +41,17 @@ describe("UserSchema", () => {
         },
       }),
     ).toBeTruthy();
+  });
+
+  it("rejects unknown coachmark IDs (typo / stale ID protection — back_end §3.4)", () => {
+    expect(() =>
+      UserSchema.parse({
+        ...valid,
+        onboarding_state: {
+          dismissed_coachmarks: ["composer_frist_translate"], // typo of …first…
+        },
+      }),
+    ).toThrow();
   });
 
   it("preserves onboarding_state.completed_at on round-trip (back_end §3.4 lifecycle step 4)", () => {
@@ -166,5 +177,24 @@ describe("UsageEventSchema", () => {
 
   it("rejects unknown kind", () => {
     expect(() => UsageEventSchema.parse({ ...valid, kind: "back_translate" })).toThrow();
+  });
+});
+
+describe("CoachmarkIdSchema", () => {
+  it("accepts each documented coachmark ID (back_end §3.4)", () => {
+    for (const id of [
+      "composer_first_translate",
+      "audit_points_first",
+      "view_toggle_first",
+      "refine_first",
+    ]) {
+      expect(CoachmarkIdSchema.parse(id)).toBe(id);
+    }
+  });
+
+  it("rejects unknown coachmark IDs (typo / stale ID)", () => {
+    expect(() => CoachmarkIdSchema.parse("composer_frist_translate")).toThrow();
+    expect(() => CoachmarkIdSchema.parse("history_recovery_first")).toThrow();
+    expect(() => CoachmarkIdSchema.parse("")).toThrow();
   });
 });
