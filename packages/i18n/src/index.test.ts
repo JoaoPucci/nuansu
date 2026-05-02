@@ -17,14 +17,17 @@ function collectKeyPaths(obj: unknown, prefix = ""): string[] {
   return paths.sort();
 }
 
-// Walk a nested JSON object and collect leaf string values.
-function collectValuesByPath(obj: unknown, prefix = ""): Map<string, string> {
-  const out = new Map<string, string>();
-  if (obj === null || typeof obj === "string") {
-    out.set(prefix, typeof obj === "string" ? obj : "");
+// Walk a nested JSON object and collect EVERY leaf value (string, number,
+// boolean, null — anything that's not an object). The value-discipline
+// suite then asserts each is a non-empty string. Returning unknown rather
+// than dropping non-strings means a `naturalness: 50` slip surfaces in CI
+// instead of passing silently.
+function collectValuesByPath(obj: unknown, prefix = ""): Map<string, unknown> {
+  const out = new Map<string, unknown>();
+  if (obj === null || typeof obj !== "object") {
+    out.set(prefix, obj);
     return out;
   }
-  if (typeof obj !== "object") return out;
   for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
     const sub = collectValuesByPath(value, prefix ? `${prefix}.${key}` : key);
     for (const [k, v] of sub) out.set(k, v);
@@ -70,13 +73,20 @@ describe("@nuansu/i18n — key parity (en ↔ ja)", () => {
   }
 });
 
-describe("@nuansu/i18n — value discipline", () => {
+describe("@nuansu/i18n — value discipline (every leaf is a non-empty string)", () => {
   for (const locale of SUPPORTED_LOCALES) {
     for (const ns of NAMESPACES) {
-      it(`'${locale}.${ns}': all leaf values are non-empty strings`, () => {
+      it(`'${locale}.${ns}': every leaf is a non-empty string`, () => {
         const values = collectValuesByPath(resources[locale][ns]);
-        const empty = [...values.entries()].filter(([, v]) => v === "" || v == null);
-        expect(empty).toEqual([]);
+        const violations: string[] = [];
+        for (const [path, value] of values) {
+          if (typeof value !== "string") {
+            violations.push(`${path}: expected string, got ${typeof value} (${String(value)})`);
+          } else if (value === "") {
+            violations.push(`${path}: empty string`);
+          }
+        }
+        expect(violations).toEqual([]);
       });
     }
   }
@@ -89,26 +99,51 @@ describe("@nuansu/i18n — onboarding fixture signals (back_end §3.4)", () => {
   // informal-but-not-rude for the target locale." The Aiko + Shibuya
   // signals are what exercise the documented anti-drift demonstration
   // (name preservation + place-name lock) in the first-run sample chat.
+  //
+  // back_end §3.4 also requires "fixtures authored per (source_lang,
+  // target_lang) pair" — for v1 that's `en_ja` and `ja_en`. Both pairs
+  // ship in both locale files so a user whose UI locale doesn't match
+  // their source_lang still gets correctly-directed fixtures.
+  const PAIRS = ["en_ja", "ja_en"] as const;
+
   for (const locale of SUPPORTED_LOCALES) {
-    it(`'${locale}.onboarding.fixtures': contains the 'Aiko' contact-name signal`, () => {
-      const fixtureValues = [...collectValuesByPath(resources[locale].onboarding).values()].join(
-        "\n",
-      );
-      expect(fixtureValues).toMatch(/Aiko/);
-    });
+    for (const pair of PAIRS) {
+      it(`'${locale}.onboarding.fixtures.${pair}': contains the 'Aiko' contact-name signal`, () => {
+        const pairFixtures = (
+          resources[locale].onboarding as {
+            fixtures: Record<string, Record<string, unknown>>;
+          }
+        ).fixtures[pair];
+        const text = JSON.stringify(pairFixtures);
+        expect(text).toMatch(/Aiko/);
+      });
 
-    it(`'${locale}.onboarding.fixtures': contains the 'Shibuya' place-name signal`, () => {
-      const fixtureValues = [...collectValuesByPath(resources[locale].onboarding).values()].join(
-        "\n",
-      );
-      expect(fixtureValues).toMatch(/Shibuya/);
-    });
+      it(`'${locale}.onboarding.fixtures.${pair}': contains the 'Shibuya' place-name signal`, () => {
+        const pairFixtures = (
+          resources[locale].onboarding as {
+            fixtures: Record<string, Record<string, unknown>>;
+          }
+        ).fixtures[pair];
+        const text = JSON.stringify(pairFixtures);
+        expect(text).toMatch(/Shibuya/);
+      });
 
-    it(`'${locale}.onboarding.fixtures': ships exactly 3 fixture messages`, () => {
+      it(`'${locale}.onboarding.fixtures.${pair}': ships exactly 3 fixture messages`, () => {
+        const pairFixtures = (
+          resources[locale].onboarding as {
+            fixtures: Record<string, Record<string, unknown>>;
+          }
+        ).fixtures[pair];
+        expect(pairFixtures).toBeDefined();
+        const messageKeys = Object.keys(pairFixtures ?? {}).filter((k) => k.startsWith("message_"));
+        expect(messageKeys).toHaveLength(3);
+      });
+    }
+
+    it(`'${locale}.onboarding.fixtures': ships both v1 language pairs (en_ja, ja_en)`, () => {
       const fixtures = (resources[locale].onboarding as { fixtures: Record<string, unknown> })
         .fixtures;
-      const messageKeys = Object.keys(fixtures).filter((k) => k.startsWith("message_"));
-      expect(messageKeys).toHaveLength(3);
+      expect(Object.keys(fixtures).sort()).toEqual(["en_ja", "ja_en"]);
     });
   }
 });
@@ -123,9 +158,11 @@ describe("@nuansu/i18n — placeholder parity (en ↔ ja)", () => {
       const jaValues = collectValuesByPath(resources.ja[ns]);
       const mismatches: string[] = [];
       for (const [path, enValue] of enValues) {
-        const jaValue = jaValues.get(path) ?? "";
+        if (typeof enValue !== "string") continue;
+        const jaValue = jaValues.get(path);
+        const jaText = typeof jaValue === "string" ? jaValue : "";
         const enPlaceholders = extractPlaceholders(enValue);
-        const jaPlaceholders = extractPlaceholders(jaValue);
+        const jaPlaceholders = extractPlaceholders(jaText);
         if (JSON.stringify(enPlaceholders) !== JSON.stringify(jaPlaceholders)) {
           mismatches.push(
             `${path}: en=[${enPlaceholders.join(",")}] vs ja=[${jaPlaceholders.join(",")}]`,
