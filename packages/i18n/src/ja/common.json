@@ -15,6 +15,27 @@
     "delete": "削除",
     "confirm": "確認",
     "back": "戻る",
-    "continue": "続ける"
+    "continue": "続ける",
+    "close": "閉じる",
+    "retry": "再試行",
+    "copy": "コピー"
+  },
+  "languages": {
+    "en": "English",
+    "ja": "日本語"
+  },
+  "toast": {
+    "saved": "保存しました",
+    "copied": "クリップボードにコピーしました",
+    "error_generic": "問題が発生しました。もう一度お試しください。"
+  },
+  "loading": {
+    "default": "読み込み中…"
+  },
+  "errors": {
+    "network": "サーバーに接続できません。接続をご確認ください。",
+    "unauthorized": "続けるにはログインしてください。",
+    "not_found": "見つかりませんでした。",
+    "rate_limited": "リクエストが多すぎます。しばらくお待ちください。"
   }
 }

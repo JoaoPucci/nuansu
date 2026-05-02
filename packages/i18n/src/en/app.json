@@ -1,0 +1,139 @@
+{
+  "chats": {
+    "list_title": "Chats",
+    "empty_title": "No chats yet",
+    "empty_body": "Start a chat to translate your first message.",
+    "new_chat_cta": "New chat",
+    "new_chat_dialog_title": "New chat",
+    "new_chat_name_label": "Who's this chat with?",
+    "new_chat_name_placeholder": "e.g., Aiko",
+    "new_chat_target_lang_label": "Translate to",
+    "new_chat_create_cta": "Create chat",
+    "archived_section": "Archived",
+    "archive_cta": "Archive",
+    "unarchive_cta": "Unarchive",
+    "delete_confirm_title": "Delete this chat?",
+    "delete_confirm_body": "This permanently removes the chat and its messages. The original drafts are also gone.",
+    "delete_confirm_cta": "Delete chat",
+    "delete_warning_pending": "There are unsaved local changes. Delete anyway?"
+  },
+  "chat_header": {
+    "target_lang_label": "Translates to",
+    "prefs_button_label": "Chat preferences",
+    "view_source": "Source",
+    "view_both": "Both",
+    "view_target": "Target"
+  },
+  "preferences": {
+    "title": "Preferences",
+    "subtitle_chat": "Settings for this chat. Empty fields fall back to your defaults.",
+    "subtitle_global": "Defaults for new chats.",
+    "target_lang": "Target language",
+    "register": "Register",
+    "register_help": "How formal the translation should be. Leave blank to infer from naturalness.",
+    "naturalness": "Naturalness",
+    "naturalness_help": "0 = strict literal, 100 = fully natural / colloquial.",
+    "my_nickname": "My nickname",
+    "my_nickname_help": "How you'd like to be referred to in this chat.",
+    "contact_name_src": "Contact's name (source)",
+    "contact_name_tgt": "Contact's name (target)",
+    "contact_name_tgt_help": "Optional override for how their name appears in the target language.",
+    "notes": "Notes",
+    "notes_help": "Anything that helps the translator — context, vocabulary, things to avoid.",
+    "save_cta": "Save preferences",
+    "concurrent_edit_banner": "These preferences were updated on another device. Reload to see the latest."
+  },
+  "global_preferences": {
+    "title": "Global preferences",
+    "default_target_lang": "Default target language",
+    "default_register": "Default register",
+    "default_naturalness": "Default naturalness",
+    "names_are_sacred": "Always preserve names verbatim",
+    "explain_verbosity": "Audit detail",
+    "explain_terse": "Terse",
+    "explain_standard": "Standard",
+    "explain_verbose": "Verbose",
+    "preferred_model_tier": "Model tier",
+    "tier_standard": "Standard",
+    "tier_priority": "Priority"
+  },
+  "composer": {
+    "placeholder": "Type a message…",
+    "translate_cta": "Translate",
+    "refine_cta": "Refine",
+    "refine_placeholder": "Tell me what to change…",
+    "commit_cta": "Send",
+    "cancel_cta": "Cancel",
+    "iterate_cta": "Iterate",
+    "drafting_label": "Drafting",
+    "generating_label": "Translating…",
+    "iterating_label": "Refining…",
+    "committing_label": "Sending…"
+  },
+  "candidates": {
+    "literal_label": "Literal",
+    "natural_label": "Natural",
+    "gloss_label": "Why this works",
+    "register_detected": "Detected register: {{register}}",
+    "register_chosen": "Chosen register: {{register}}",
+    "name_check_preserved": "Name preserved: {{name}}",
+    "name_check_changed": "Name changed: {{name}}"
+  },
+  "audit_points": {
+    "title": "What changed",
+    "title_empty": "No changes — translation is faithful",
+    "accept_cta": "Accept",
+    "reject_cta": "Reject",
+    "by_category": {
+      "name": "Name",
+      "register": "Register",
+      "idiom": "Idiom",
+      "tone": "Tone",
+      "ambiguity": "Ambiguity",
+      "omission": "Omission",
+      "other": "Other"
+    }
+  },
+  "message_bubble": {
+    "copy_label": "Copy message",
+    "copy_success": "Copied",
+    "history_label": "Show original and audit",
+    "history_drawer_title": "How this message was translated",
+    "raw_draft_label": "Your raw draft",
+    "literal_pass_label": "Literal pass",
+    "natural_pass_label": "Natural pass",
+    "audit_label": "Audit points",
+    "final_label": "Final sent"
+  },
+  "drift_suggestions": {
+    "card_title": "I noticed something",
+    "by_category": {
+      "name_reveal": "Name update",
+      "nickname_offer": "Nickname offered",
+      "register_shift": "Register shift",
+      "context_update": "Context update"
+    },
+    "evidence_label": "From their message:",
+    "apply_cta": "Apply",
+    "keep_both_cta": "Keep both",
+    "dismiss_cta": "Dismiss",
+    "applied_toast": "Preference updated."
+  },
+  "compose_hint": {
+    "did_you_mean": "Did you mean {{suggested}}? ({{prior}} was their earlier name)",
+    "rewrite_cta": "Rewrite"
+  },
+  "coachmarks": {
+    "composer_first_translate": "Tap Translate to see the literal and natural passes side by side.",
+    "audit_points_first": "Every meaningful change shows up here. Accept, reject, or just read why.",
+    "view_toggle_first": "Switch between source, target, or both — your preference per chat.",
+    "refine_first": "Not quite right? Tell me what to change in plain language."
+  },
+  "onboarding_app": {
+    "sample_chat_banner": "This is a sample chat to show you around. Archive it any time.",
+    "use_real_chats_cta": "Use real chats",
+    "fixture_message_1": "Hey, can you let me know when you're free?",
+    "fixture_message_2": "Sure, I'm free on the weekend. What did you have in mind?",
+    "fixture_message_3": "Want to try a real chat?"
+  }
+}
