@@ -372,12 +372,152 @@ Reserved for confirmations (Saved, Copied, Deleted) — never for errors. Bottom
 
 ## 8. Motion
 
-- **Duration default:** 180ms. Faster (120ms) for hover/focus, slower (260ms) for layout shifts.
-- **Easing default:** custom cubic-bezier(0.2, 0.8, 0.2, 1) — quick start, smooth land.
-- **Streaming text.** Tokens append with no animation (animation per token is dizzying). The candidate card shows a thin indeterminate accent bar while streaming.
-- **List enter / exit.** New messages slide up 8px and fade in 220ms.
-- **Mode transitions.** When switching the view toggle, message bodies cross-fade in place (160ms) — never reflow the list.
-- **Reduced motion.** `prefers-reduced-motion` disables all non-essential motion; transitions become instant.
+Motion is part of the brand. Reference apps (Linear, Granola, Cron, Raycast) earn their feel partly through motion — the right easing, the right direction, the right amount of stagger. AI defaults blow this: parallax everywhere, bouncy springs, decorative micro-animations on every hover. That's the wrong product. The bar here is **calm, purposeful, sub-180ms**.
+
+This section gives implementation a coherent vocabulary and decision framework. Specifics that depend on browser-real validation (exact timing curves, micro-pixel tweaks) are discovered during Phase 5/6 implementation, not pre-specified here.
+
+### 8.1 Principles
+
+1. **Motion encodes meaning.** A modal fades because it's an overlay; a bottom sheet rises because it lives below the fold; navigation pushes laterally because spatial-page-stack is the mental model. Direction and curve are semantics, not decoration.
+2. **Subtractive over additive.** When in doubt, less. A page that ships with no motion is more on-brand than one with bouncy springs everywhere.
+3. **Match the reference apps in feel.** If your animation reads as "AI-default" (bouncy, long, parallax), it's wrong even if the duration token says 180ms.
+4. **Never animate to compensate for slowness.** A spinner is not motion design. A 600ms enter to "soften" a slow load makes the load feel longer. Fix the load.
+5. **Honour `prefers-reduced-motion`.** Always. Tested in §8.10.
+
+### 8.2 Duration & easing tokens
+
+Named tokens that components reference. Implementation: CSS custom properties + Framer Motion presets.
+
+| Token               | Duration | Use                                                                        |
+| ------------------- | -------- | -------------------------------------------------------------------------- |
+| `motion-instant`    | 0 ms     | `prefers-reduced-motion` substitute for any non-essential motion           |
+| `motion-quick`      | 120 ms   | Hover, focus, button press, icon state changes                             |
+| `motion-default`    | 180 ms   | Most enter/exit (suggestion card, popover, toast, bubble emphasis)         |
+| `motion-deliberate` | 220 ms   | List item enter (new message slide-up), drawer slide                       |
+| `motion-layout`     | 260 ms   | Layout shifts that move existing content (chat-list reorder, panel resize) |
+
+| Easing            | Curve                            | Use                                                                           |
+| ----------------- | -------------------------------- | ----------------------------------------------------------------------------- |
+| `ease-default`    | `cubic-bezier(0.2, 0.8, 0.2, 1)` | All enter, exit, micro-interactions. Quick start, smooth land.                |
+| `ease-emphasized` | `cubic-bezier(0.32, 0.72, 0, 1)` | The one-off "this matters" enter (first paint of a chat, sample-chat banner). |
+| `ease-linear`     | `linear`                         | Indeterminate progress (streaming accent bar). Never for enter/exit.          |
+
+**No spring curves.** Springs read as playful and break the calm aesthetic. If something needs "extra life," shorten the duration instead of bouncing the curve.
+
+### 8.3 Direction vocabulary
+
+Direction conveys meaning. Don't reinvent per component.
+
+| Element                        | Enter                        | Exit                       |
+| ------------------------------ | ---------------------------- | -------------------------- |
+| Modal / dialog                 | Fade + scale (0.96 → 1)      | Fade + scale (1 → 0.96)    |
+| Toast                          | Slide up from bottom + fade  | Slide down + fade          |
+| Slide-over (preferences panel) | Slide in from trailing edge  | Slide out to trailing edge |
+| Bottom sheet (mobile)          | Slide up from bottom         | Slide down                 |
+| Popover / tooltip / coachmark  | Fade + 4px slide from anchor | Fade                       |
+| Inline card (suggestion, hint) | Fade + 4px slide up          | Fade + height collapse     |
+| New message bubble             | Slide up 8px + fade          | (no exit; bubbles persist) |
+| Route navigation               | Cross-fade (no slide)        | Cross-fade                 |
+| Dropdown menu / select         | Fade + 4px slide from anchor | Fade                       |
+
+The repeated `4px slide from anchor` for popover-class elements creates a consistent "anchored to a thing" feel; modals and toasts use larger movements because they're not anchored to a UI element.
+
+### 8.4 Pattern catalog
+
+Component-level motion specs already documented in §7 components. Summary table for cross-reference:
+
+| Component                        | Enter                                                    | Exit                         | Duration / easing                       |
+| -------------------------------- | -------------------------------------------------------- | ---------------------------- | --------------------------------------- |
+| `MessageBubble` (new)            | Slide up 8px + fade                                      | None                         | `motion-deliberate` / `ease-default`    |
+| `CandidatePanel` (streaming)     | Slide up 12px + fade                                     | Slide down + fade            | `motion-default` / `ease-default`       |
+| `AuditPointList` items           | Stagger 30ms each, fade in                               | Stagger collapse             | `motion-default` / `ease-default`       |
+| `SuggestionCard`                 | Fade + 4px slide up                                      | Height collapse + fade out   | 180 ms in / 120 ms out / `ease-default` |
+| `ComposeHint`                    | Fade only                                                | Fade only                    | 120 ms / `ease-default`                 |
+| `Coachmark`                      | Fade + 4px slide from anchor                             | Fade                         | 180 ms in / 120 ms out / `ease-default` |
+| `SampleChatBanner`               | None on enter (structural)                               | Fade out (during navigation) | 180 ms / `ease-default`                 |
+| Toast (sonner)                   | Slide up from bottom + fade                              | Slide down + fade            | `motion-default` / `ease-default`       |
+| Drawer (preferences slide-over)  | Slide in from right (desktop) / up (mobile bottom sheet) | Slide out reverse            | `motion-deliberate` / `ease-default`    |
+| Modal / dialog                   | Backdrop fade + content fade+scale (0.96 → 1)            | Reverse                      | `motion-default` / `ease-default`       |
+| View toggle (source/both/target) | Cross-fade message bodies in place (no reflow)           | n/a                          | 160 ms / `ease-default`                 |
+
+When a per-component spec contradicts this table, the component spec wins (it's likely a deliberate exception). Any third option needs a written justification — components should not invent new motion vocabularies.
+
+### 8.5 Streaming visualization
+
+While translation streams (composer in `generating` state, inbound paste in flight), surface progress without distracting from the content that's appearing.
+
+- **Token append: no animation.** New tokens appear instantly. Animating per-token is dizzying and reads as "the AI is putting on a show."
+- **Indeterminate accent bar:** 2 px tall, full width of the candidate card, sitting at the top edge. Background `accent-quiet`; sliding gradient overlay in `accent` (Aizome) at ~40% opacity, animating left-to-right linearly over 1200 ms, infinite repeat. Renders as a calm "energy is happening here" cue without competing for attention.
+- **Bar disappears** the moment streaming completes, fade-out 120 ms.
+- **No spinners anywhere.** Spinners say "I'm computing"; the bar says "data is arriving." Different signals, and we're always in the second case.
+- **Skeleton shimmer for non-streaming loads** (initial chat-list paint, message-history paint): pulse animation 1500 ms infinite, opacity 0.4 ↔ 0.7. Subtle. Never on a content surface that's already partly loaded.
+
+### 8.6 Stagger
+
+When a list of items reveals, stagger gives the eye time to track. Cap it tight — long stagger reads as choreography.
+
+- **Stagger interval:** 30 ms between items.
+- **Maximum staggered items:** 6. Beyond 6, items 7+ appear simultaneously with item 6.
+- **Apply to:** `AuditPointList` enter, suggestion-list-panel enter (when chat-header badge is opened), chat-list initial paint when transitioning from auth → app.
+- **Don't apply to:** message bubbles arriving during a chat session (those use the per-bubble enter, no batching), settings rows, search results.
+
+### 8.7 Microinteractions
+
+Small confirmations that say "the system noticed your action." All under 200 ms. Pattern: scale or color, never both, never bounce.
+
+| Action                               | Visual                                                                                                                          |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| Button press                         | Scale 1 → 0.97 on press, return on release. 80 ms each direction.                                                               |
+| Icon button (copy / caret / history) | Background `accent-quiet` flash 100 ms on activation                                                                            |
+| Copy success                         | Tiny "Copied" toast (1.5 s) + Vibration API tap on touch devices (per §7.1)                                                     |
+| Swipe-to-archive (mobile)            | Bubble slides 64 px left under thumb; release at >50% threshold completes the archive with a 220 ms slide-out + height-collapse |
+| Swipe-to-toggle-view (mobile)        | Subtle 40 px peek of the alternate view at swipe boundary; release commits                                                      |
+| Tap a suggestion action              | Card collapses (height 0) over 120 ms, then toast confirms                                                                      |
+| Audit point accept                   | Item border-left switches to `success`, no slide; sibling items don't shift                                                     |
+| Audit point reject                   | Item fades to 50% opacity, strikethrough on the suggested change                                                                |
+
+### 8.8 Performance budget
+
+Motion that janks is worse than no motion. Targets:
+
+- **60 fps** on iOS 14+ Safari (oldest realistic target for our PWA), Android Chrome on a mid-range 2022 device, latest desktop Chrome / Safari / Firefox.
+- **GPU-accelerated only.** Animate `transform` and `opacity`. Animating `width`, `height`, `top`, `left`, `padding` triggers layout — banned except in deliberate cases (height-collapse on suggestion-card dismiss, drawer width).
+- **No parallax, ever.** Parallax is the canonical AI-default move. It's expensive on mobile and reads as "look how clever I am." Out.
+- **No motion blur, motion gradients, or animated SVG paths** in product UI. (The marketing site can have one bespoke hero illustration with subtle motion if it earns its place.)
+- **No animation longer than 320 ms** in product UI. If you need longer, you're probably trying to compensate for a slow load — fix the load.
+- **`will-change` discipline.** Add only on the element about to animate; remove after. Permanent `will-change` on every animated element evicts memory and slows scrolling.
+
+The `motion-fps` benchmark in `vitest bench` doesn't make sense (browser-only); we instead spot-check via Chrome DevTools Performance tab on key flows during Phase 5/6 implementation: composer state-machine transitions, message-list scroll, suggestion-card resolution.
+
+### 8.9 Framer Motion conventions
+
+We use Framer Motion as the React API for motion (already in `package.json`). Conventions:
+
+- **Wrap when motion is non-trivial.** A simple 120 ms hover doesn't need `<motion.div>` — CSS transitions handle it cheaper. Wrap when there's enter/exit choreography, layout animation, or coordinated sequences.
+- **Variants are reusable** in `apps/web/src/lib/motion-variants.ts` (file lands in Phase 5). Common variants: `fadeSlideUp`, `fadeScale`, `slideOverRight`, `slideOverBottom`, `coachmarkAnchored(direction)`. Components import and apply, never inline custom variants for what already exists.
+- **`AnimatePresence` for exit** — use it whenever an element conditionally renders and needs to animate out before unmount (modals, toasts, suggestion cards).
+- **`LayoutGroup` for shared-element transitions** — use sparingly. The view-toggle cross-fade is the only v1 use case.
+- **Avoid `whileHover` / `whileTap`** — prefer CSS `:hover` / `:active` for cheaper hover/press feedback. Use Framer Motion's whileHover only when the hover state needs to coordinate with other elements (rare).
+- **Never `useScroll` with parallax in product UI.** Banned per §8.8.
+- **Spring curves: forbidden** — see §8.2. Use `tween` with `ease-default` instead.
+
+### 8.10 `prefers-reduced-motion`
+
+The OS-level "I don't want motion" setting. Honour it everywhere, automatically.
+
+| Motion class                                                            | Reduced-motion behaviour                              |
+| ----------------------------------------------------------------------- | ----------------------------------------------------- |
+| Decorative / coordination (stagger, mode transitions, slide directions) | Becomes instant — no animation, no fade               |
+| Transform-based enter/exit (slide, scale)                               | Becomes a 120 ms fade-only                            |
+| Streaming accent bar                                                    | Becomes a static 2 px filled bar (no slide animation) |
+| Skeleton shimmer                                                        | Becomes a static surface-2 placeholder                |
+| Microinteractions (button press scale, icon flash)                      | Disabled — show the end state instantly               |
+| Toast slide-up                                                          | Becomes a fade-only, same duration                    |
+| Modal / dialog scale                                                    | Becomes fade-only, same duration                      |
+
+Implementation: a single `useReducedMotion()` hook from Framer Motion exposes the OS preference; variants accept a `reduce` flag and switch curves. The CSS layer has a fallback `@media (prefers-reduced-motion: reduce)` block that disables `transform` transitions for non-Framer elements (CSS-only buttons, etc.).
+
+**Never disable motion entirely under `prefers-reduced-motion`** — fade-only is still motion and helps users orient. Disable only the kinetic component.
 
 ## 9. Iconography & illustration
 
