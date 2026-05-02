@@ -1,0 +1,86 @@
+// Account, billing, and usage schemas: User (users + auth_users projection),
+// Subscription (subscriptions table), UsageEvent (usage_events table).
+// docs/back_end_architecture.md §3.1.
+
+import { z } from "zod";
+import { UuidV7Schema } from "./common.js";
+
+// ─── User ──────────────────────────────────────────────────────────────────
+// Public-facing projection of `users` joined to `auth_users` (id, email,
+// email_verified). Excludes secret fields (dek_wrapped). Used as the shape
+// the client sees via `GET /api/me`.
+
+export const LocaleSchema = z.enum(["en", "ja"]);
+export const RegionSchema = z.enum(["jp", "us", "eu"]);
+
+export const OnboardingStateSchema = z.object({
+  sample_chat_id: UuidV7Schema.optional(),
+  dismissed_coachmarks: z.array(z.string()),
+  // Forward-compat: jsonb may carry future fields; allow + strip unknowns.
+});
+
+export type OnboardingState = z.infer<typeof OnboardingStateSchema>;
+
+export const UserSchema = z.object({
+  id: z.string().min(1), // text id from auth_users (UUID-shaped)
+  email: z.email(),
+  email_verified: z.boolean(),
+  display_name: z.string().nullable(),
+  source_language: z.string().min(2),
+  locale: LocaleSchema,
+  region: RegionSchema,
+  is_dogfood: z.boolean(),
+  onboarding_state: OnboardingStateSchema,
+  created_at: z.iso.datetime(),
+  deleted_at: z.iso.datetime().nullable(),
+});
+
+export type User = z.infer<typeof UserSchema>;
+
+// ─── Subscription ──────────────────────────────────────────────────────────
+// Mirrors the subscriptions table. `status` per Stripe lifecycle.
+
+export const SubscriptionStatusSchema = z.enum([
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "none",
+]);
+
+export const SubscriptionPlanSchema = z.enum(["free", "pro"]);
+
+export const SubscriptionSchema = z.object({
+  user_id: z.string().min(1),
+  stripe_customer_id: z.string().min(1),
+  stripe_subscription_id: z.string().nullable(),
+  status: SubscriptionStatusSchema,
+  plan: SubscriptionPlanSchema,
+  trial_ends_at: z.iso.datetime().nullable(),
+  current_period_end: z.iso.datetime().nullable(),
+  cancel_at_period_end: z.boolean(),
+});
+
+export type Subscription = z.infer<typeof SubscriptionSchema>;
+
+// ─── UsageEvent ────────────────────────────────────────────────────────────
+// One row per LLM call. Used for quota, billing reconciliation, observability.
+// Cost is denominated in micro-USD (1 USD = 1_000_000) to keep integer math.
+
+export const UsageEventKindSchema = z.enum(["translate_outbound", "translate_inbound", "refine"]);
+
+export const UsageEventSchema = z.object({
+  id: UuidV7Schema,
+  user_id: z.string().min(1),
+  chat_id: UuidV7Schema.nullable(),
+  kind: UsageEventKindSchema,
+  model: z.string().min(1),
+  input_tokens: z.number().int().nonnegative(),
+  output_tokens: z.number().int().nonnegative(),
+  cached_tokens: z.number().int().nonnegative(),
+  cost_micro_usd: z.number().int().nonnegative(),
+  request_id: z.string().min(1),
+  created_at: z.iso.datetime(),
+});
+
+export type UsageEvent = z.infer<typeof UsageEventSchema>;
