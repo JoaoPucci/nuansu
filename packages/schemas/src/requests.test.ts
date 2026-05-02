@@ -92,17 +92,43 @@ describe("InboundRequestSchema", () => {
     ).toThrow();
   });
 
-  it("does NOT accept draft_source_text (that's TranslateRequest territory)", () => {
+  it("rejects draft_source_text (TranslateRequest field on Inbound — strict boundary)", () => {
+    // Strict request schema: cross-endpoint field bleeding throws instead
+    // of being silently stripped, so contract drift surfaces in CI/dev.
     expect(() =>
       InboundRequestSchema.parse({
         ...baseInboundBody,
         draft_source_text: "Should not be here",
       }),
-    ).not.toThrow(); // zod strips by default; passes but field is ignored
-    const parsed = InboundRequestSchema.parse({
-      ...baseInboundBody,
-      draft_source_text: "ignored",
-    });
-    expect((parsed as Record<string, unknown>).draft_source_text).toBeUndefined();
+    ).toThrow();
+  });
+
+  it("rejects arbitrary unknown fields", () => {
+    expect(() =>
+      InboundRequestSchema.parse({
+        ...baseInboundBody,
+        debug_flag: true,
+      }),
+    ).toThrow();
+  });
+});
+
+describe("TranslateRequestSchema strict boundary", () => {
+  it("rejects unknown fields on the request body", () => {
+    expect(() =>
+      TranslateRequestSchema.parse({
+        ...baseTranslateBody,
+        debug_flag: true,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects pasted_target_text (InboundRequest field on Translate)", () => {
+    expect(() =>
+      TranslateRequestSchema.parse({
+        ...baseTranslateBody,
+        pasted_target_text: "wrong endpoint",
+      }),
+    ).toThrow();
   });
 });

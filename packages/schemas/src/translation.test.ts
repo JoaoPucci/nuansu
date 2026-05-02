@@ -152,15 +152,16 @@ describe("TranslationObjectSchema", () => {
 });
 
 describe("TranslationStreamChunkSchema", () => {
-  it("accepts every chunk variant", () => {
+  it("accepts every chunk variant (each carrying its required `seq`)", () => {
     const chunks = [
-      { type: "literal" as const, text_delta: "Hi" },
-      { type: "natural" as const, text_delta: "Hi" },
-      { type: "gloss" as const, text_delta: "casual greeting" },
-      { type: "register" as const, detected: "casual", confidence: 0.9 },
-      { type: "dialect" as const, flags: ["kanto"] },
-      { type: "name_check" as const, name: "Aiko", preserved: true },
+      { seq: 0, type: "literal" as const, text_delta: "Hi" },
+      { seq: 1, type: "natural" as const, text_delta: "Hi" },
+      { seq: 2, type: "gloss" as const, text_delta: "casual greeting" },
+      { seq: 3, type: "register" as const, detected: "casual", confidence: 0.9 },
+      { seq: 4, type: "dialect" as const, flags: ["kanto"] },
+      { seq: 5, type: "name_check" as const, name: "Aiko", preserved: true },
       {
+        seq: 6,
         type: "audit_point" as const,
         point: {
           id: VALID_UUIDV7,
@@ -171,8 +172,8 @@ describe("TranslationStreamChunkSchema", () => {
           accepted: null,
         },
       },
-      { type: "done" as const },
-      { type: "error" as const, code: "rate_limit", message: "Too many requests" },
+      { seq: 7, type: "done" as const },
+      { seq: 8, type: "error" as const, code: "rate_limit", message: "Too many requests" },
     ];
     for (const chunk of chunks) {
       expect(() => TranslationStreamChunkSchema.parse(chunk)).not.toThrow();
@@ -181,10 +182,29 @@ describe("TranslationStreamChunkSchema", () => {
 
   it("discriminates correctly on `type`", () => {
     // literal chunk shouldn't accept fields from another variant
-    expect(() => TranslationStreamChunkSchema.parse({ type: "literal", flags: ["x"] })).toThrow();
+    expect(() =>
+      TranslationStreamChunkSchema.parse({ seq: 0, type: "literal", flags: ["x"] }),
+    ).toThrow();
   });
 
   it("rejects unknown chunk type", () => {
-    expect(() => TranslationStreamChunkSchema.parse({ type: "vibes", text_delta: "x" })).toThrow();
+    expect(() =>
+      TranslationStreamChunkSchema.parse({ seq: 0, type: "vibes", text_delta: "x" }),
+    ).toThrow();
+  });
+
+  it("requires `seq` on every variant (back_end §2.3 wire contract)", () => {
+    expect(() => TranslationStreamChunkSchema.parse({ type: "done" })).toThrow();
+    expect(() =>
+      TranslationStreamChunkSchema.parse({ type: "literal", text_delta: "Hi" }),
+    ).toThrow();
+  });
+
+  it("rejects negative `seq` (must be a non-negative integer per stream)", () => {
+    expect(() => TranslationStreamChunkSchema.parse({ seq: -1, type: "done" })).toThrow();
+  });
+
+  it("rejects non-integer `seq`", () => {
+    expect(() => TranslationStreamChunkSchema.parse({ seq: 1.5, type: "done" })).toThrow();
   });
 });

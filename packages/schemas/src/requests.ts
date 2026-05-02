@@ -19,26 +19,37 @@ const UserIdSchema = z.string().min(1);
 //   - per-turn truncation handled server-side (we just validate count here)
 const RecentThreadSchema = z.array(RecentThreadTurnSchema).max(10);
 
-export const TranslateRequestSchema = z.object({
-  draft_source_text: z.string().min(1),
-  prior_translation: TranslationObjectSchema.optional(),
-  refine_instruction: z.string().optional(),
-  prefs_snapshot: PrefsSnapshotSchema,
-  name_locks: z.array(NameLockRefSchema),
-  recent_thread: RecentThreadSchema,
-  idempotency_key: IdempotencyKeySchema,
-  user_id: UserIdSchema,
-});
+// `.strict()` on both request schemas: unknown keys produce a validation
+// error rather than being silently stripped (zod default). At the API
+// boundary, strict rejection catches client/server contract drift early
+// and prevents cross-endpoint mistakes (e.g., sending TranslateRequest
+// fields to /inbound) from being swallowed. Internal types and DB-shape
+// schemas stay loose; only the wire-input boundary is strict.
+
+export const TranslateRequestSchema = z
+  .object({
+    draft_source_text: z.string().min(1),
+    prior_translation: TranslationObjectSchema.optional(),
+    refine_instruction: z.string().optional(),
+    prefs_snapshot: PrefsSnapshotSchema,
+    name_locks: z.array(NameLockRefSchema),
+    recent_thread: RecentThreadSchema,
+    idempotency_key: IdempotencyKeySchema,
+    user_id: UserIdSchema,
+  })
+  .strict();
 
 export type TranslateRequest = z.infer<typeof TranslateRequestSchema>;
 
-export const InboundRequestSchema = z.object({
-  pasted_target_text: z.string().min(1),
-  prefs_snapshot: PrefsSnapshotSchema,
-  name_locks: z.array(NameLockRefSchema),
-  recent_thread: RecentThreadSchema,
-  idempotency_key: IdempotencyKeySchema,
-  user_id: UserIdSchema,
-});
+export const InboundRequestSchema = z
+  .object({
+    pasted_target_text: z.string().min(1),
+    prefs_snapshot: PrefsSnapshotSchema,
+    name_locks: z.array(NameLockRefSchema),
+    recent_thread: RecentThreadSchema,
+    idempotency_key: IdempotencyKeySchema,
+    user_id: UserIdSchema,
+  })
+  .strict();
 
 export type InboundRequest = z.infer<typeof InboundRequestSchema>;

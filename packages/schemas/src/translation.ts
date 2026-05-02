@@ -109,27 +109,41 @@ export type TranslationObject = z.infer<typeof TranslationObjectSchema>;
 // ─── TranslationStreamChunk ────────────────────────────────────────────────
 // Discriminated union on `type`. The orchestrator emits these over SSE as
 // the LLM's structured tokens stabilise. See docs/back_end_architecture.md §5.2.
+//
+// Every variant carries a `seq` field per back_end §2.3 ("each event is
+// `data: <json>` where <json> is one fragment of the partial Translation
+// Object plus a `seq` field"). Clients use `seq` for out-of-order detection,
+// gap recovery, and replay safety. Strictly increasing per stream, starts
+// at 0.
+
+const SeqField = { seq: z.number().int().nonnegative() } as const;
 
 export const TranslationStreamChunkSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("literal"), text_delta: z.string() }),
-  z.object({ type: z.literal("natural"), text_delta: z.string() }),
-  z.object({ type: z.literal("gloss"), text_delta: z.string() }),
+  z.object({ ...SeqField, type: z.literal("literal"), text_delta: z.string() }),
+  z.object({ ...SeqField, type: z.literal("natural"), text_delta: z.string() }),
+  z.object({ ...SeqField, type: z.literal("gloss"), text_delta: z.string() }),
   z.object({
+    ...SeqField,
     type: z.literal("register"),
     detected: z.string().optional(),
     chosen: z.string().optional(),
     confidence: z.number().min(0).max(1).optional(),
   }),
-  z.object({ type: z.literal("dialect"), flags: z.array(z.string()) }),
+  z.object({ ...SeqField, type: z.literal("dialect"), flags: z.array(z.string()) }),
   z.object({
+    ...SeqField,
     type: z.literal("name_check"),
     name: z.string().min(1),
     preserved: z.boolean(),
   }),
-  z.object({ type: z.literal("audit_point"), point: AuditPointSchema }),
-  z.object({ type: z.literal("prefs_suggestion"), suggestion: PrefsSuggestionSchema }),
-  z.object({ type: z.literal("done") }),
-  z.object({ type: z.literal("error"), code: z.string(), message: z.string() }),
+  z.object({ ...SeqField, type: z.literal("audit_point"), point: AuditPointSchema }),
+  z.object({
+    ...SeqField,
+    type: z.literal("prefs_suggestion"),
+    suggestion: PrefsSuggestionSchema,
+  }),
+  z.object({ ...SeqField, type: z.literal("done") }),
+  z.object({ ...SeqField, type: z.literal("error"), code: z.string(), message: z.string() }),
 ]);
 
 export type TranslationStreamChunk = z.infer<typeof TranslationStreamChunkSchema>;
