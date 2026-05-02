@@ -97,9 +97,22 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Phase 1 ships zero e2e specs. The job stays in the matrix so that the
+      # day Phase 3 lands the first marketing e2e, this guard auto-activates.
+      - name: Skip if no e2e specs exist
+        id: e2e-guard
+        run: |
+          if [ -z "$(find apps/web/test/e2e -name '*.spec.ts' 2>/dev/null)" ]; then
+            echo "has-tests=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No e2e specs yet — skipping Playwright run."
+          else
+            echo "has-tests=true" >> "$GITHUB_OUTPUT"
+          fi
       - run: pnpm exec playwright install --with-deps chromium webkit
+        if: steps.e2e-guard.outputs.has-tests == 'true'
         working-directory: apps/web
       - run: pnpm test:e2e
+        if: steps.e2e-guard.outputs.has-tests == 'true'
         env:
           DATABASE_URL: postgres://nuansu:nuansu_dev@localhost:5432/nuansu_test
           BETTER_AUTH_SECRET: ci_test_secret_at_least_32_bytes_xxxxxxxx
@@ -120,7 +133,19 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Phase 2 lands envelope-encrypt bench; Phase 6 lands SSE-parser bench.
+      # Skip cleanly until at least one *.bench.ts exists.
+      - name: Skip if no benchmark files exist
+        id: bench-guard
+        run: |
+          if [ -z "$(find . -name '*.bench.ts' -not -path './node_modules/*' 2>/dev/null)" ]; then
+            echo "has-benches=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No *.bench.ts files yet — skipping Vitest bench."
+          else
+            echo "has-benches=true" >> "$GITHUB_OUTPUT"
+          fi
       - run: pnpm bench
+        if: steps.bench-guard.outputs.has-benches == 'true'
 
   bundle-size:
     name: bundle size budget
@@ -135,7 +160,20 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      # Phase 1's app shell doesn't yet emit dist/assets/main-*.js (no real
+      # entry chunk to measure). Skip cleanly until Phase 3+ produces the
+      # marketing bundle. Auto-activates as soon as the file appears.
+      - name: Skip if no built bundle exists
+        id: bundle-guard
+        run: |
+          if [ -z "$(find apps/web/dist/assets -name 'main-*.js' 2>/dev/null)" ]; then
+            echo "has-bundle=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No dist/assets/main-*.js yet — skipping size-limit."
+          else
+            echo "has-bundle=true" >> "$GITHUB_OUTPUT"
+          fi
       - run: pnpm --filter @nuansu/web exec size-limit
+        if: steps.bundle-guard.outputs.has-bundle == 'true'
 
   lighthouse:
     name: lighthouse (>= 90 on prerendered pages)

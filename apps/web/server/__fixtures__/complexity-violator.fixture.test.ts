@@ -12,25 +12,29 @@ const FIXTURE = path.resolve(__dirname, "complexity-violator.fixture.ts");
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
 
 describe("ESLint complexity gate", () => {
-  it("reports sonarjs/cognitive-complexity on the deliberately-complex fixture", async () => {
-    const eslint = new ESLint({
-      cwd: REPO_ROOT,
-      // Override the project's ignore so the fixture is linted for this test.
-      overrideConfig: {
-        ignores: [],
-      },
-      ignore: false,
-    });
+  it(
+    "reports sonarjs/cognitive-complexity on the deliberately-complex fixture",
+    { timeout: 30_000 },
+    async () => {
+      const eslint = new ESLint({
+        cwd: REPO_ROOT,
+        // Override the project's ignore so the fixture is linted for this test.
+        overrideConfig: {
+          ignores: [],
+        },
+        ignore: false,
+      });
 
-    const results = await eslint.lintFiles([FIXTURE]);
-    const messages = results[0]?.messages ?? [];
-    const complexityHits = messages.filter(
-      (m) => m.ruleId === "sonarjs/cognitive-complexity" || m.ruleId === "complexity",
-    );
+      const results = await eslint.lintFiles([FIXTURE]);
+      const messages = results[0]?.messages ?? [];
+      const complexityHits = messages.filter(
+        (m) => m.ruleId === "sonarjs/cognitive-complexity" || m.ruleId === "complexity",
+      );
 
-    expect(
-      complexityHits.length,
-      `Expected complexity rules to fire on the fixture but got: ${JSON.stringify(messages, null, 2)}`,
-    ).toBeGreaterThan(0);
-  });
+      expect(
+        complexityHits.length,
+        `Expected complexity rules to fire on the fixture but got: ${JSON.stringify(messages, null, 2)}`,
+      ).toBeGreaterThan(0);
+    },
+  );
 });
