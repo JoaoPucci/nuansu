@@ -1,6 +1,11 @@
-// v1 per-call suffix — assembled per translate / inbound call. Carries the
-// chat-specific Context, Name locks, Recent thread, and the Current task.
-// These sections vary per call and are NOT part of the cached prefix.
+// Per-chat and per-call layer builders.
+//
+// `buildChatPrefsLayer` produces section 3 (Context) — the per-chat cache
+// layer. Stable across consecutive calls in the same chat; varies between
+// chats. The orchestrator caches it with `cache_control: { ephemeral }`.
+//
+// `buildPerCallLayer` produces sections 4 (Name locks), 6 (Recent thread),
+// and the Current task — the not-cached layer that varies per call.
 
 import type { NameLockRef, PrefsSnapshot, RecentThreadTurn } from "@nuansu/schemas";
 
@@ -13,7 +18,7 @@ export interface PerCallInput {
     | { kind: "inbound"; pasted_target_text: string };
 }
 
-function buildContextSection(prefs: PrefsSnapshot): string {
+export function buildChatPrefsLayer(prefs: PrefsSnapshot): string {
   const lines: string[] = [
     `# Context`,
     ``,
@@ -96,10 +101,10 @@ function buildTaskSection(task: PerCallInput["task"]): string {
   ].join("\n");
 }
 
-export function buildPerCall(input: PerCallInput): string {
+export function buildPerCallLayer(
+  input: Pick<PerCallInput, "name_locks" | "recent_thread" | "task">,
+): string {
   return [
-    buildContextSection(input.prefs),
-    ``,
     buildNameLocksSection(input.name_locks),
     ``,
     buildRecentThreadSection(input.recent_thread),

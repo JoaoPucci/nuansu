@@ -1,21 +1,21 @@
-// v1 cached prefix — the byte-stable portion of the system prompt sent on
-// every translate / inbound call. Anthropic's prompt cache matches by
-// exact-prefix bytes, so this string MUST NOT change within v1. Any text
-// edit here is effectively a new prompt version (bump to v2 + new cache key).
+// v1 universal cached layer — the byte-stable portion of the system prompt
+// that is identical across every translate / inbound call regardless of
+// chat or user. Anthropic's prompt cache matches by exact-prefix bytes, so
+// this string MUST NOT change within v1. Any text edit here is effectively
+// a new prompt version (bump to v2 + new cache key).
 //
-// Per docs/back_end_architecture.md §5.3, the cached portion includes:
-//   - Section 1: Role
-//   - Section 2: Anti-drift rules
-//   - Section 5: Output schema
-//   - Section 7: Drift detection rules
-//   - Section 8: Few-shot examples
+// This is the FIRST cache layer of three. Per back_end §5.3 the prompt has
+// multiple cache breakpoints:
+//   1. universal_v1     — this file (sections 1, 2, 5, 7, 8). Cached forever
+//                         across all chats; reused across every user.
+//   2. chat_prefs       — section 3 (Context). Per-chat cache layer; reused
+//                         across consecutive turns in the same chat session
+//                         (~5 min TTL on Anthropic's ephemeral cache).
+//   3. per_call         — sections 4, 6, task. Never cached.
 //
-// The doc says "first three sections plus drift + few-shots" are cached, but
-// section 3 (Context) holds per-chat values (lang pair, register, naturalness,
-// contact) that vary per call, so caching it byte-for-byte is impossible.
-// We cache the truly-static sections (role, anti-drift, output schema, drift
-// detection rules, few-shots) and assemble per-call values into the suffix.
-// If the doc intent was different, update §5.3 to match this implementation.
+// The orchestrator (Phase 6) translates each layer into one Anthropic
+// `system: [{ type: "text", text, cache_control? }, ...]` content block,
+// setting `cache_control: { type: "ephemeral" }` after layers 1 and 2.
 
 export const CACHED_PREFIX_V1 = `# Role
 
