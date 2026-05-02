@@ -82,6 +82,13 @@ export default tseslint.config(
           ],
         },
       ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.name='process'][property.name='env']",
+          message: "Read env via lib/env.ts (validated by zod).",
+        },
+      ],
 
       // Hygiene
       "@typescript-eslint/no-unused-vars": [
@@ -96,6 +103,14 @@ export default tseslint.config(
     },
     settings: {
       react: { version: "18" },
+      "import/resolver": {
+        typescript: {
+          alwaysTryTypes: true,
+          project: ["apps/web/tsconfig.json", "tsconfig.base.json"],
+          noWarnOnMultipleProjects: true,
+        },
+        node: true,
+      },
     },
   },
   {
@@ -127,6 +142,22 @@ export default tseslint.config(
     files: ["apps/web/src/routes/**/*.tsx", "apps/web/src/routes/**/*.ts"],
     rules: {
       "@typescript-eslint/only-throw-error": "off",
+    },
+  },
+  {
+    // Legitimate readers of process.env. Everywhere else, the no-restricted-syntax
+    // rule above forces code to import the validated env from apps/web/lib/env.ts.
+    files: [
+      "apps/web/lib/env.ts",
+      "**/*.config.{js,ts,mjs,cjs}",
+      "scripts/**/*.{js,mjs,cjs,ts}",
+      "**/*.test.{ts,tsx,mjs}",
+      "**/*.spec.ts",
+      "**/*.bench.ts",
+    ],
+    rules: {
+      "no-restricted-syntax": "off",
+      "no-restricted-imports": "off",
     },
   },
 );

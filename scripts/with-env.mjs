@@ -21,4 +21,7 @@ if (args.length === 0) {
 }
 const [cmd, ...rest] = args;
 const result = spawnSync(cmd, rest, { stdio: "inherit", env: process.env });
+// User-initiated Ctrl+C is intentional, not a failure. Without this, pnpm
+// reports ELIFECYCLE on every clean dev-server stop.
+if (result.signal === "SIGINT" || result.signal === "SIGTERM") process.exit(0);
 process.exit(result.status ?? 1);
