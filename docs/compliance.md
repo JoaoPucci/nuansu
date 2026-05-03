@@ -130,7 +130,12 @@ Two distinct touch-points:
      DELETE FROM preferences_global WHERE user_id = $1;
      DELETE FROM usage_events       WHERE user_id = $1;
      DELETE FROM export_jobs        WHERE user_id = $1;
-     DELETE FROM subscriptions      WHERE user_id = $1;
+     -- subscriptions row is INTENTIONALLY KEPT here — step 4 needs to read
+     -- subscriptions.stripe_customer_id to call Stripe customer.delete /
+     -- update. Deleting it now would leave step 4 with no way to look up
+     -- the Stripe customer on retry, leaving third-party billing data
+     -- undeleted. The subscriptions row is deleted at the end of step 4
+     -- once Stripe has acked. (back_end_architecture.md §3 schema.)
 
      -- Audit log: anonymised, not deleted (operational record of past actions)
      UPDATE audit_log SET user_id = NULL, ip = NULL, user_agent = NULL, metadata = '{}' WHERE user_id = $1;
@@ -147,7 +152,7 @@ Two distinct touch-points:
      -- deletion eliminates the small race-window with an in-flight magic-link request.
      ```
 
-  4. **Stripe**: call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent; retried by the hourly `process_deletion_queue` job if 5xx.
+  4. **Stripe**: read `stripe_customer_id` from the still-present `subscriptions` row, call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent; retried by the hourly `process_deletion_queue` job if 5xx (the subscriptions row stays intact across retries because the Stripe ack hasn't fired yet). Once Stripe acks success: `DELETE FROM subscriptions WHERE user_id = $1` in the same transaction as the ack record. After this point, no further retry of step 4 is needed and the row is no longer queryable.
   5. **Resend**: add the email address to the suppression list. Idempotent.
   6. **DEK destruction + final PII anonymisation (LAST — irreversible).** Single transaction:
 
