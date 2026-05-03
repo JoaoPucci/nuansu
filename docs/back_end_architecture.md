@@ -404,10 +404,11 @@ CREATE TABLE waitlist (
 );
 
 CREATE TABLE deletion_requests (
-  user_id      text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  requested_at timestamptz NOT NULL DEFAULT now(),
-  scheduled_for timestamptz NOT NULL,          -- now() + 30 days
-  completed_at timestamptz
+  user_id              text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  requested_at         timestamptz NOT NULL DEFAULT now(),
+  scheduled_for        timestamptz NOT NULL,    -- now() + 30 days
+  confirmation_sent_at timestamptz,             -- per-request dedupe marker for the deletion-confirmation email (compliance.md §3.3 step 5(a)). The hourly process_deletion_queue retries on `completed_at IS NULL`; without this marker, a retry after any post-step-5 failure would re-send the confirmation email and the user would receive duplicates.
+  completed_at         timestamptz
 );
 
 CREATE TABLE export_jobs (
