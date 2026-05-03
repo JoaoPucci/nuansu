@@ -619,9 +619,18 @@ export const auth = betterAuth({
 //   - Issue: generate a 32-byte CSPRNG token; INSERT
 //     (id=uuidv7, identifier=email, value=sha256(token).hex(),
 //      expires_at=now()+15min). Email the raw token URL via Resend.
-//   - Verify: lookup by identifier; compute sha256(submittedToken).hex();
-//     compare to stored value via timingSafeEqualBytes (security.md
-//     §13.6). On match: DELETE the row (single-use), then call
+//   - Verify: compute h = sha256(submittedToken).hex(); SELECT the
+//     row WHERE identifier=email AND value=h AND expires_at > now()
+//     AND created_at = (SELECT max(created_at) FROM auth_verification_tokens
+//       WHERE identifier=email AND value=h AND expires_at > now()).
+//     The match is identifier+hash equality, not identifier alone —
+//     `security.md §3.2` allows up to 5 outstanding tokens per email
+//     for rate-limit headroom, so any "lookup the row by identifier"
+//     would return a non-deterministic neighbour and reject valid
+//     tokens. After the SELECT, do the constant-time compare on the
+//     value column (`timingSafeEqualBytes`, security.md §13.6) as
+//     defense-in-depth even though the WHERE already narrowed by hash.
+//     On match: DELETE only the matched row (single-use); then call
 //     auth.api.signInEmail (or equivalent) to establish the Better
 //     Auth session.
 //
