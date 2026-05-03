@@ -46,7 +46,7 @@ The data Nuansu handles is intimate by nature: dating-app messages, personal con
 - **Token shape:** 32-byte CSPRNG (256 bits) base64url-encoded. Stored as `sha256(token)` in `auth_verification_tokens.value_hash` — the raw token never sits in the DB, so a DB read can't replay it.
 - **Lifetime:** 15 minutes from issue. Single-use: deleted in the same transaction as verification (so a captured link can't be replayed even within the window).
 - **Rate limits:** ≤5 outstanding tokens per email at any time; ≤5 sends/hour/email AND ≤20 sends/hour/source-IP; verify-attempts ≤10/hour/IP. Rate-limit state lives in Redis with an atomic Lua script per check.
-- **Lookup:** constant-time comparison via `crypto.subtle.timingSafeEqual` against the stored hash.
+- **Lookup:** constant-time comparison via the `timingSafeEqualBytes` wrapper from §13.6 (length-safe `node:crypto` `timingSafeEqual`) against the stored hash.
 - **Email enumeration:** signup and login flows return identical "We sent a link if that account exists" messaging within constant wall-clock time (per §13.4 timing parity rule).
 
 ### 3.3 OAuth account-linking discipline
@@ -360,12 +360,27 @@ upgrade-insecure-requests;
 
 ### 13.5 Webhook security
 
-- Stripe and Resend webhooks verify HMAC signatures on every call using `crypto.subtle.timingSafeEqual` (constant-time comparison; `===` on signature strings leaks via timing on V8/workerd).
+- Stripe and Resend webhooks verify HMAC signatures on every call using the `timingSafeEqualBytes` wrapper from §13.6 (length-safe `node:crypto` `timingSafeEqual`; `===` on signature strings leaks via timing on V8/workerd, and the bare `node:crypto` API throws on length mismatch which would 500 on a malformed webhook).
 - Event IDs deduplicated against the `webhook_events` table per `back_end_architecture.md §8`. `payload_hash` (sha256 of body) stored alongside `event_id`; a second request with the same `event_id` but different body is rejected and logged as a tamper attempt.
 
 ### 13.6 Constant-time comparison for tokens
 
-Every secret comparison uses `crypto.subtle.timingSafeEqual` (Web Crypto, available in workerd) — never `===`. Applies to: webhook signatures, magic-link tokens, idempotency keys, CSRF tokens, session IDs, OAuth state values, MFA codes, password-reset tokens. CI lint rule prohibits `===` (and `!=`/`!==`) on variables matching the regex `(?i)(token|secret|signature|hmac|csrf|mfa)`.
+Every secret comparison uses `timingSafeEqual` from `node:crypto` (exposed in workerd via the `nodejs_compat` flag) — never `===`. Applies to: webhook signatures, magic-link tokens, idempotency keys, CSRF tokens, session IDs, OAuth state values, MFA codes, password-reset tokens.
+
+**Length-safe wrapper.** `timingSafeEqual` throws `RangeError` when the two buffers have different lengths, which would surface as a 500 on attacker-controlled inputs (e.g., a webhook with a malformed signature). Always wrap:
+
+```ts
+import { timingSafeEqual as nodeTimingSafeEqual } from "node:crypto";
+
+function timingSafeEqualBytes(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  return nodeTimingSafeEqual(a, b);
+}
+```
+
+The `byteLength` early-return is itself constant-time relative to the secret because it compares two known integers — no information about the secret bytes leaks. Only the equal-length call enters the constant-time path.
+
+**CI lint rule** prohibits `===`, `!=`, and `!==` on variables matching `/(?:token|secret|signature|hmac|csrf|mfa|key|nonce|tag)/i` — JavaScript regex syntax with the `i` flag suffix (the older `(?i)` PCRE inline form does not parse in JavaScript).
 
 ### 13.7 Supply chain
 
