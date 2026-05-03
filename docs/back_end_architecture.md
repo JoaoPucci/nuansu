@@ -141,16 +141,17 @@ CREATE INDEX idx_auth_verification_identifier ON auth_verification_tokens(identi
 
 -- ─── Application users — product-specific extension of auth_users ───
 CREATE TABLE users (
-  id                text PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
-  display_name      text,
-  source_language   text NOT NULL DEFAULT 'en',
-  locale            text NOT NULL DEFAULT 'en',         -- 'en' | 'ja' — drives email templates + JP support routing
-  region            text NOT NULL DEFAULT 'jp',         -- 'jp' | 'us' | 'eu' — drives multi-region routing (architecture.md §10)
-  is_dogfood        boolean NOT NULL DEFAULT false,     -- excludes from product analytics
-  dek_wrapped       bytea,                              -- KMS-wrapped per-user data encryption key. Crypto-erasure timeline: destroying this row makes the user's encrypted fields unreadable from the live DB immediately and from backups as the wrapped DEK ages out (≤35 days per backup retention; privacy policy discloses this window).
-  onboarding_state  jsonb NOT NULL DEFAULT '{"dismissed_coachmarks": []}'::jsonb,  -- see §3.4
-  created_at        timestamptz NOT NULL DEFAULT now(),
-  deleted_at        timestamptz
+  id                       text PRIMARY KEY REFERENCES auth_users(id) ON DELETE CASCADE,
+  display_name             text,
+  source_language          text NOT NULL DEFAULT 'en',
+  locale                   text NOT NULL DEFAULT 'en',         -- 'en' | 'ja' — drives email templates + JP support routing
+  region                   text NOT NULL DEFAULT 'jp',         -- 'jp' | 'us' | 'eu' — drives multi-region routing (architecture.md §10)
+  is_dogfood               boolean NOT NULL DEFAULT false,     -- excludes from product analytics
+  dek_wrapped              bytea,                              -- KMS-wrapped per-user data encryption key. Crypto-erasure timeline: destroying this row makes the user's encrypted fields unreadable from the live DB immediately and from backups as the wrapped DEK ages out (≤35 days per backup retention; privacy policy discloses this window).
+  onboarding_state         jsonb NOT NULL DEFAULT '{"dismissed_coachmarks": []}'::jsonb,  -- see §3.4
+  sessions_revoked_after   timestamptz,                        -- durable watermark for "logout from all devices"; sessions whose `iat <= sessions_revoked_after` are invalid. Read on every cookie validation (cache miss falls back to this column, never to "no record found = unrevoked"). Redis carries a derived cache for the hot path; this column is the source of truth — see security.md §3.4.
+  created_at               timestamptz NOT NULL DEFAULT now(),
+  deleted_at               timestamptz
 );
 
 -- A trigger creates a row in `users` whenever a row is created in `auth_users`.

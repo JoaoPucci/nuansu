@@ -59,8 +59,9 @@ The data Nuansu handles is intimate by nature: dating-app messages, personal con
 ### 3.4 Session validation cache + revocation
 
 - **Cache:** 5-minute cookie cache at the Worker edge avoids hitting the DB on every request; full validation on cache miss. Cache key is `sha256(cookie_value || env.APP_ENV)` so PoP-shared caches can't be cross-environment-poisoned.
-- **Logout-all-devices:** clicking "logout from all devices" writes `users.sessions_revoked_after = now()` to a Redis-backed scratch key (read on every cached validation). Cached entries with `iat < revoked_after` are dropped immediately. Without this, a stolen-phone scenario keeps the revoked session alive at PoPs for up to 5 minutes — the failure mode that matters most.
-- **Single-session logout** (just this device) revokes just the one cookie; doesn't touch the user-level `sessions_revoked_after`.
+- **Revocation watermark — durable.** `users.sessions_revoked_after timestamptz` (see `back_end_architecture.md §3.1`) is the single source of truth for "all sessions issued before this moment are invalid." Postgres only — never Redis-only. Redis is a read-through cache populated lazily from Postgres on session-validation cache miss, and refreshed eagerly on every logout-all write. The "stolen-phone, just clicked logout-all" scenario is exactly the case where Redis eviction (TTL, restart, region failover) cannot be allowed to drop the watermark and resurrect a revoked cookie until its 30-day expiry — so the cache miss falls back to Postgres, never to "no record found = unrevoked."
+- **Logout-all-devices** writes `UPDATE users SET sessions_revoked_after = now() WHERE id = $1` inside the same transaction as the audit-log entry, then writes the same value to the Redis cache. Cached session entries with `iat < revoked_after` are dropped immediately on the next read. The Postgres write is the durable commit; the Redis write is performance.
+- **Single-session logout** (just this device) revokes just the one cookie via `DELETE FROM auth_sessions WHERE id = $1`; doesn't touch the user-level `sessions_revoked_after`.
 - **Sensitive-action sessions** (paid tier, after MFA setup) drop the cache TTL to 60s so revocation propagates faster.
 
 ### 3.5 Email change + recovery
