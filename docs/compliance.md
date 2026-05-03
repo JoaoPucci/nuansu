@@ -174,7 +174,24 @@ Two distinct touch-points:
 
      The `subscriptions` row stays intact across step 4 AND beyond — it's not deleted here, because if step 5, 6, or 7 fails after step 4 commits, the hourly retry needs to re-enter the flow with `stripe_customer_id` still queryable. The DELETE moves to step 7 (atomically with the completion marker).
 
-  5. **Resend**: in this exact order — (a) **send the deletion-confirmation email** to the user from a generic system address; (b) **then** add the email address to the Resend suppression list. Both halves are idempotent. The order matters: if the suppression-list write happens first, Resend would suppress the confirmation email and the user would never be told their account was deleted (the confirmation must precede suppression because a suppressed address can't receive). The confirmation must also precede step 6 because step 6 replaces `auth_users.email` with the `<id>@deleted.invalid` placeholder — after step 6 there's no real address left to send to.
+  5. **Resend**: in this exact order —
+     - **(a) Send the deletion-confirmation email**, gated on a per-request dedupe marker so cross-tick retries don't re-send. Logic:
+
+       ```sql
+       SELECT confirmation_sent_at FROM deletion_requests WHERE user_id = $1;
+       -- If NULL, send the email via Resend, then in the SAME transaction:
+       UPDATE deletion_requests SET confirmation_sent_at = now() WHERE user_id = $1;
+       -- If already non-NULL, skip — a prior step-5 attempt sent the email
+       -- and a downstream step (6 or 7) failed; resending would give the
+       -- user duplicate "account deleted" emails.
+       ```
+
+       The `confirmation_sent_at` column lives on `deletion_requests` (see `back_end_architecture.md §3`). Resend's `Idempotency-Key` header alone isn't enough here because it only persists ~24h and the queue retry window is unbounded.
+
+     - **(b) Add the email address to the Resend suppression list.** Idempotent on Resend's side — adding an already-suppressed address is a no-op.
+
+     The order matters: if the suppression-list write happens first, Resend would suppress the confirmation email and the user would never be told their account was deleted. The confirmation must also precede step 6 because step 6 replaces `auth_users.email` with the `<id>@deleted.invalid` placeholder — after step 6 there's no real address left to send to.
+
   6. **DEK destruction + final PII anonymisation (LAST — irreversible).** Single transaction:
 
      ```sql
@@ -270,7 +287,7 @@ The fix is to keep the product general; the dating use case is an example among 
 ## 5. Cookie & analytics policy
 
 - **No tracking on marketing pages by default.** The first time a visitor consents to analytics or visits the app, a cookie/localStorage flag is set.
-- **Cookie banner** appears for EU/UK and California IPs. It explains essential cookies (no choice) vs analytics (opt-in for EU, opt-out for US).
+- **Cookie banner** appears for EU/UK IPs (consent collection is a hard requirement under GDPR + ePrivacy). For all other regions — including California, JP, BR, AU, and every non-EU/UK country — analytics defaults to opt-out per §3.5: the PostHog SDK initialises by default, the user can disable it via the Settings toggle, and the privacy policy discloses the right to object. The cookie banner explains essential cookies (no choice anywhere) vs analytics (opt-in for EU/UK; opt-out for non-EU/UK including JP). Aligns with §3.5; do not introduce a third regional default here.
 - **Categories:**
   - Essential: session cookie, CSRF token. No banner consent needed.
   - Analytics: PostHog. Off until consent (EU) or opt-out flag (US).
