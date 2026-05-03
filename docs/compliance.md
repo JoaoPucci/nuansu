@@ -57,12 +57,18 @@ Two distinct touch-points:
 - **Many Nuansu users will be Japanese residents.** As a JP-resident sole proprietor (個人事業主) operating a service that handles personal data of JP users, the founder is a JP-domiciled controller — APPI applies directly. This is _simpler_ than a foreign-controller scenario: no need to appoint a JP representative under APPI Art. 5(2); no foreign-business special rules.
 - **Conversation partners** of Nuansu users (the people they're translating to/from) are not Nuansu users, but their messages flow through us. Their data is incidental: the Nuansu user is treated as the data controller of that pasted content; Nuansu is a processor for it.
 - ToS requires the user to ensure they have the right to translate the content they paste.
-- 2022 amendment: cross-border transfers require disclosure. We disclose in the privacy policy that data is processed in:
-  - Japan (Supabase Tokyo primary store; Cloudflare Tokyo PoPs; Upstash Tokyo; AWS KMS Tokyo).
-  - United States (Anthropic, Stripe, Sentry, Resend, Google OAuth, Apple OAuth).
-  - European Union (PostHog).
-  - Global edge (Cloudflare).
-- 2023 amendment (incident reporting): data breaches affecting JP residents must be reported to the Personal Information Protection Commission (PPC) without delay; covered in the incident-response runbook.
+- 2022 amendment: cross-border transfers require disclosure of recipient country, recipient country's data-protection regime, equivalent rights status, and safeguards in place. We disclose in the privacy policy:
+
+  | Recipient country / region | Recipients                                                                               | Data-protection regime + safeguards (JP-locale text [COUNSEL] for final wording)                                                                                                                                                                                                                                                                               |
+  | -------------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | Japan                      | Supabase Tokyo (Postgres + Storage); Cloudflare Tokyo PoPs; Upstash Tokyo; AWS KMS Tokyo | Domestic processing under APPI itself; no cross-border transfer                                                                                                                                                                                                                                                                                                |
+  | United States              | Anthropic, Stripe, Sentry, Resend, Google OAuth, Apple OAuth                             | No comprehensive federal data-protection law; sectoral regimes (HIPAA, COPPA, etc. — none apply directly to Nuansu data). EU-US Data Privacy Framework where vendor is certified; SCCs (2021/914 Module 2) where not. List of executed SCCs maintained at `private/legal/transfers/`. APPI 2022 disclosure shows "(USA — no equivalent regime; SCCs in place)" |
+  | European Union             | PostHog                                                                                  | GDPR adequate per APPI Cabinet Order; full equivalence to JP-resident protections. APPI 2022 disclosure shows "(EU — adequate per Cabinet Order)"                                                                                                                                                                                                              |
+  | Global edge (Cloudflare)   | Cloudflare WAF + Pages content delivery                                                  | Request metadata only; ciphertext bodies in transit. SCCs in place per Cloudflare DPA                                                                                                                                                                                                                                                                          |
+
+- **SCC modules in use**: 2021/914 Module 2 (controller-to-processor) for US sub-processors; UK International Data Transfer Addendum applies for any UK user (trigger: first sign-up from a UK IP). Per-vendor SCC PDFs archived at `private/legal/transfers/<vendor>-<date>.pdf`. `[COUNSEL]` to confirm SCC module per vendor before signing.
+- **Transfer Impact Assessments (TIA)** completed and archived for each US transfer post-Schrems II. Outcome documented in the same `private/legal/transfers/<vendor>-tia.md`.
+- 2023 amendment (incident reporting): data breaches affecting JP residents must be reported to the Personal Information Protection Commission (PPC) without delay; covered in `private/runbooks/incident-response.md` (referenced from §6.2 below).
 
 ### 1.5 Other notable regimes (lighter posture)
 
@@ -87,30 +93,42 @@ Two distinct touch-points:
   - `user.json` (profile, prefs, name locks).
   - `chats.jsonl` (one chat per line).
   - `messages.jsonl` (one message per line, with full version history and audit points; decrypted for the user).
+  - `pref_suggestions.jsonl` (drift-detection history + user resolutions).
+  - `audit_log.jsonl` (the user's own actions: logins, MFA setups, email changes, exports, deletions). Required for GDPR Art. 15 — users have the right to know what we know about them, including derived/operational data.
   - `usage.csv` (counts only; no content).
-  - `manifest.json` (export timestamp, data scope, format version).
-- Delivered via a signed download URL emailed to the user; URL expires in 7 days.
-- Request rate-limited to 1 per 24 hours.
-- DSAR contact addresses: `privacy@nuansu.app` (English, primary) and `privacy-jp@nuansu.app` (Japanese, with JP-language acknowledgement template). JP users receive auto-acknowledgement in JP within 24h; full response within the regulatory window for their jurisdiction.
+  - `manifest.json` (export timestamp, data scope, `format_version` semver).
+- **Schema versioning.** The export shape is defined in `packages/export/schema.ts` with versioned interfaces. `format_version` follows semver: minor bumps add fields (consumers should ignore unknowns); major bumps change shape (consumers must update to consume). Old format versions remain documented for at least 12 months so external consumers (e.g., a self-hosted Obsidian importer) have time to adapt.
+- **Delivery.** The user receives an email containing a signed app-local URL of the form `/exports/<job_id>?token=<signed>`. The URL is **not** a direct storage URL — direct storage URLs are bearer credentials that survive any inbox compromise (phishing, SIM swap, residual access in a recycled email). The app-local URL requires a re-authenticated session (within the last 10 min) and proxies the storage object via a one-time-use server-side fetch. URL expires after the first download or 24 hours, whichever comes first; bound to the requesting user-agent + IP family. Outbound `Referrer-Policy: no-referrer` header strips the URL from any subsequent navigation.
+- Request rate-limited to 1 per 24 hours per account.
+- DSAR contact addresses: `privacy@nuansu.app` (English, primary) and `privacy-jp@nuansu.app` (Japanese, with JP-language acknowledgement template). JP users receive auto-acknowledgement in JP within 24h; full response within the regulatory window for their jurisdiction. Inbound mailbox provisioning documented in `deployment.md §5.6`.
 
 ### 3.2 Right of rectification
 
-- All user-editable fields are settings-editable.
+- All user-editable fields are settings-editable. Profile rectification (display name, locale, region, source language) is logged to `audit_log` with rate-limit (≤ 1 email-change request / 24h per account; region change requires re-verification because it drives multi-region routing).
 - Messages themselves are immutable (committed). To "correct" a message, the user posts a new one; the original remains for audit.
+- **AI-generated derived data** (audit points, `pref_suggestions.reasoning`) is covered by GDPR Art. 16 as inferred personal data. Mechanisms:
+  - Per-audit-point dismissal in the message history view; dismissed audit points are excluded from any further inference and from data export reasoning (preserved as an anonymised entry showing only category + dismissed status).
+  - Per-suggestion `dismiss` action excludes that field from drift-detection re-emission for 30 days (already documented in `back_end_architecture.md §5.4`).
+  - "Report wrong audit point" affordance — surfaces a one-click feedback channel that flags the audit point for retraining/prompt-tuning consideration.
 
 ### 3.3 Right to erasure
 
 - Settings → "Delete my account". Two-step confirmation, requires re-auth.
 - Soft-deleted immediately; user is logged out; account cannot be re-opened.
 - Hard-deletion runs at scheduled time (max 30 days).
-- Hard-deletion sequence:
-  1. Delete user's DEK from the wrapped key store → all field-encrypted content is now cryptographically erased.
-  2. Delete `messages`, `message_versions`, `audit_points`, `chats`, `preferences_*`, `name_locks`, `usage_events`, `subscriptions` rows.
-  3. Anonymise audit_log entries: `user_id` set to NULL, ip nulled, `metadata` redacted.
-  4. Notify Stripe to delete the customer (or anonymise per Stripe's retention rules).
-  5. Notify Resend to suppress further mail.
-  6. Confirmation email to the user from a generic system address.
-- Backups: deletion eventually propagates as backups age out. Privacy policy states that backups retain data up to 35 days post-deletion.
+- **Hard-deletion sequence** — ordered to be transactional-where-possible and to put the irreversible step last so a partial-failure replay can re-attempt every other step idempotently. KMS DEK destruction is the cryptographic point of no return; everything else can run again.
+  1. **Flag the user as deleting.** Set `users.deleted_at`. The session-middleware rejects all new authenticated requests for this user with a `410 Gone` immediately.
+  2. **Drain in-flight.** Wait ~30 s for any concurrent translate/inbound stream to complete or time out. Avoids racing the deletion against a write that lands after `messages` is purged.
+  3. **Postgres transaction** (single transaction, all-or-nothing):
+     - `DELETE FROM messages, message_versions, audit_points, chats, preferences_*, name_locks, pref_suggestions, usage_events, export_jobs, deletion_requests, subscriptions WHERE user_id = $1`. Cascades fire automatically.
+     - `UPDATE audit_log SET user_id = NULL, ip = NULL, user_agent = NULL, metadata = '{}' WHERE user_id = $1`. Audit entries are preserved (operational log of past actions) but anonymised.
+     - `DELETE FROM auth_sessions, auth_accounts, auth_verification_tokens WHERE user_id = $1`.
+  4. **Stripe**: call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent; retried by the nightly purge-deletion-queue job if 5xx.
+  5. **Resend**: add the email address to the suppression list. Idempotent.
+  6. **KMS DEK destruction (LAST — irreversible).** Delete the wrapped DEK from `users.dek_wrapped` AND issue `kms:ScheduleKeyDeletion` against any per-user KMS material. After this step, the user's encrypted ciphertext is mathematically unreadable, including from any backup that still contains rows.
+  7. `UPDATE deletion_requests SET completed_at = now()` only after step 6 acks. The nightly `purge_deletion_queue` job (per `back_end_architecture.md §7`) retries any incomplete deletion (`completed_at IS NULL AND scheduled_for < now()`).
+- **Confirmation email** to the user from a generic system address before step 6 (so it's still sendable; after step 6 the user's data including email is gone).
+- **Backups + crypto-erasure.** The wrapped DEK lives in `users.dek_wrapped` (the Postgres `users` table); this row is included in PITR + daily/weekly backups. Privacy policy discloses: deletion is immediately effective on the live database; full crypto-erasure completes when the last backup containing the wrapped DEK ages out — **≤ 35 days post-deletion** (the maximum backup retention per `deployment.md §8`). Until that window closes, an attacker with both backup access AND KMS access could in principle restore. Both are tightly controlled (backup access requires Supabase admin; KMS access requires the dedicated AWS sub-account); separately auditable.
 
 ### 3.4 Right to restrict processing
 
@@ -194,7 +212,18 @@ We are required to inform you under [applicable regulation, e.g., GDPR Art. 34 /
 
 ### 6.2 Authority notification (GDPR Art. 33)
 
-Drafted from a template; submitted within 72h of awareness via the lead supervisory authority's portal. Template lives in an internal `/runbooks/incident-response.md` (not in this repo).
+Drafted from a template; submitted within 72h of awareness via the lead supervisory authority's portal. APPI 2023 amendment requires notification to the Personal Information Protection Commission "without delay" for breaches affecting JP residents (no fixed clock; precedent suggests within days). LGPD (Brazil) requires notification within 2 working days.
+
+**Runbook location.** The full incident-response runbook lives at `private/runbooks/incident-response.md` (gitignored — contains the founder's contact info, alerting channel tokens, on-call procedures). Public reference here so the file's existence is discoverable. Expected sections in the runbook:
+
+- Severity definitions (P0/P1/P2/P3) with examples + time-to-mitigate targets.
+- Alerting wire-up: Sentry rule → email (`alerts@nuansu.app`) + Pushover/Telegram → founder phone. Tested quarterly via a dry-run alert.
+- First-30-minutes checklist (acknowledge → mitigate → capture state).
+- Notification timing matrix per regulation: GDPR 72h to authority + "without undue delay" to data subjects; APPI "without delay" to PPC + affected JP users; LGPD 2 working days; CCPA reasonable time per AG guidance.
+- Postmortem template + 7-day SLA.
+- Disclosure-template index pointing back to this section's §6.1 + the authority-notification template form.
+
+The runbook is exercised in quarterly DR drills (see `deployment.md §8`) — including the crypto-erasure verification drill (delete a test user, restore backup from before deletion, confirm ciphertext present but un-decryptable).
 
 ## 7. Records of processing activities (ROPA — GDPR Art. 30)
 
@@ -212,22 +241,26 @@ The current ROPA template ships in a private location, not the public repo.
 
 ## 8. Vendor sub-processors
 
-Public sub-processor list maintained at `/sub-processors` on the marketing site:
+**Single source of truth.** The list below is the authoritative version. The public `/sub-processors` page (rendered from `apps/web/src/routes/$locale/sub-processors.tsx`), the privacy-policy "who we share with" section, the ROPA recipient list, and `security.md §9` Vendor risk all consume the same source: a typed registry at `packages/legal/sub-processors.ts`. Keeping all four downstream consumers in sync requires a single source — drift is otherwise inevitable, and a stale `/sub-processors` page is a regulatory finding waiting to happen.
 
-| Sub-processor              | Purpose                                                                       | Region                             | Transfer mechanism |
-| -------------------------- | ----------------------------------------------------------------------------- | ---------------------------------- | ------------------ |
-| Anthropic (Claude)         | LLM inference                                                                 | US (APAC endpoint where available) | DPA + SCCs + ZDR   |
-| Cloudflare                 | Hosting (Pages + Functions), DNS, WAF, DDoS, Turnstile captcha                | Tokyo PoPs (primary), global edge  | DPA + SCCs         |
-| Supabase                   | Postgres + Storage **only** (no auth)                                         | Northeast Asia 1 (Tokyo)           | DPA + SCCs         |
-| Google (OAuth)             | Sign-in identity provider — `email profile` scope only                        | US/global                          | DPA                |
-| Apple (Sign in with Apple) | Sign-in identity provider — `email name` scope only                           | US/global                          | DPA                |
-| LINE                       | LINE Login OAuth — `profile openid` scope only                                | JP                                 | DPA                |
-| Stripe                     | Payments + Stripe Tax                                                         | US/EU                              | DPA + SCCs         |
-| Resend                     | Transactional email (Better Auth magic links + Stripe receipts + system mail) | US                                 | DPA + SCCs         |
-| Sentry                     | Error monitoring                                                              | US (EU plan available)             | DPA + SCCs         |
-| PostHog                    | Product analytics (opt-in for EU)                                             | EU                                 | DPA                |
-| Upstash                    | Rate limit / cache                                                            | Tokyo region                       | DPA + SCCs         |
-| AWS                        | KMS root key only                                                             | `ap-northeast-1` (Tokyo)           | DPA + SCCs         |
+| Sub-processor              | Purpose                                                                       | Region                             | Transfer mechanism + SCC module                                             |
+| -------------------------- | ----------------------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------- |
+| Anthropic (Claude)         | LLM inference                                                                 | US (APAC endpoint where available) | DPA + SCCs (2021/914 Module 2) + ZDR. UK addendum applies for UK transfers. |
+| Cloudflare                 | Hosting (Pages + Functions), DNS, WAF, DDoS, Turnstile captcha                | Tokyo PoPs (primary), global edge  | DPA + SCCs (Module 2). UK addendum.                                         |
+| Supabase                   | Postgres + Storage **only** (no auth)                                         | Northeast Asia 1 (Tokyo)           | DPA + SCCs (Module 2 for any EU/UK transfer; primary store is JP)           |
+| Google (OAuth)             | Sign-in identity provider — `email profile` scope only                        | US/global                          | DPA + EU-US DPF (Google certified)                                          |
+| Apple (Sign in with Apple) | Sign-in identity provider — `email name` scope only                           | US/global                          | DPA                                                                         |
+| LINE                       | LINE Login OAuth — `profile openid` scope only                                | JP                                 | DPA (domestic JP, no cross-border)                                          |
+| Stripe                     | Payments + Stripe Tax                                                         | US/EU                              | DPA + SCCs (Module 2) + EU-US DPF (Stripe certified)                        |
+| Resend                     | Transactional email (Better Auth magic links + Stripe receipts + system mail) | US                                 | DPA + SCCs (Module 2)                                                       |
+| Sentry                     | Error monitoring                                                              | US (EU plan available)             | DPA + SCCs (Module 2)                                                       |
+| PostHog                    | Product analytics (opt-in for EU; opt-out for JP per §3.5)                    | EU                                 | DPA (EU-resident data; APPI 2022 disclosure for JP-user analytics — §1.4)   |
+| Upstash                    | Rate limit / cache                                                            | Tokyo region                       | DPA + SCCs (Module 2 for EU/UK transfers; primary is JP)                    |
+| AWS                        | KMS root key only                                                             | `ap-northeast-1` (Tokyo)           | DPA + SCCs (Module 2 for EU/UK; primary is JP)                              |
+
+**Adding or changing a sub-processor**: 30-day advance notice to existing users (standard DPA expectation). Notification mechanism: an opt-in email-list `sub-processor-changes@nuansu.app` exposed on the `/sub-processors` page; subscribers receive the notice 30 days before any change takes effect. The list itself is hosted in Resend with consent stored in `users.consent_prefs.sub_processor_notice` (defaults to off; opt-in via the page).
+
+**Executed SCCs + TIAs** archived per vendor at `private/legal/transfers/<vendor>-scc-<yyyy-mm>.pdf` and `private/legal/transfers/<vendor>-tia-<yyyy-mm>.md`. `[COUNSEL]` to confirm SCC module choice per vendor before signing.
 
 ## 9. Privacy policy structure
 
@@ -256,20 +289,47 @@ Sections (write with counsel review before launch):
 - Termination: by either party; data export available for 30 days post-termination.
 - Governing law: TBD (likely founder's jurisdiction; counsel decides).
 
+### 10.1 AGPL-3.0 exposure obligations
+
+Nuansu's source is licensed AGPL-3.0. AGPL §13 requires that any user interacting with a modified version over a network be offered access to the corresponding source. To satisfy this:
+
+- The application footer links to a `/source` page that publishes (a) the canonical GitHub repository URL and (b) the deployed commit SHA (matches the Sentry release tag). For a self-hosted modified version, the operator is responsible for exposing their own source.
+- Contributions are accepted under the existing AGPL-3.0 license. PRs require a Developer Certificate of Origin (DCO) sign-off in the commit message (`Signed-off-by: Name <email>`). Documented in `AGENTS.md §3.5`.
+- The `LICENSE` file is referenced from the repo footer + the `/source` page.
+
+### 10.2 Content moderation + platform-cooperation stance
+
+Nuansu is a translation copilot — we facilitate communication, we don't generate content de novo. Posture:
+
+- **Outputs are bound by Anthropic's content policy** (the LLM provider's safety filtering applies to all translations).
+- **No proactive moderation** of user-typed source content; Nuansu doesn't read messages for policy compliance.
+- **Third-party platform reports.** If a platform (LINE, Tinder, Meta, etc.) traces a user complaint back to a translation produced by Nuansu and asks for our cooperation: we require a JP-court order or MLAT request for content disclosure. We can produce ciphertext + envelope-encryption metadata; without the user's DEK (which is destroyed on account deletion), the ciphertext is mathematically unreadable by us.
+- **Law enforcement requests** — formal legal process required. We publish an annual transparency report (post-launch) summarising the volume + jurisdictions of requests received and outcomes (`compliance.md §13` once the first report ships).
+- `[COUNSEL]` for the formal language; this section is the founder-level position, not the legally-reviewed text.
+
 ## 11. Pre-launch compliance checklist
 
 - [ ] DPIA drafted and reviewed.
+- [ ] Privacy policy and ToS **drafted (EN + JP v0)** in-repo before any signup is opened, even pre-counsel — without a published policy, signup cannot lawfully process EU/JP/CA users. Counsel review is the next gate.
 - [ ] Privacy policy and ToS reviewed by counsel — **JP-language versions reviewed by JP-qualified counsel** (APPI + consumer protection).
-- [ ] Sub-processor list published at `/sub-processors` (EN + JP).
+- [ ] DPIA filled in by founder (controller block, JP address, draft date) and signed off by EU + JP counsel — placeholders resolved.
+- [ ] Anthropic ZDR contract countersigned + PDF archived. **No production traffic until done.** Until then: privacy policy must disclose 30-day retention OR all paid-LLM calls hit a ZDR-confirmed account.
+- [ ] Sub-processor list published at `/sub-processors` (EN + JP) — generated from the single source `packages/legal/sub-processors.ts`.
+- [ ] Sub-processor 30-day notice mechanism live (Resend list + opt-in form on `/sub-processors`).
 - [ ] DPAs with all sub-processors (Anthropic, Cloudflare, Supabase, Google, Apple, LINE, Stripe, Resend, Sentry, PostHog, Upstash, AWS).
-- [ ] Cookie banner active in required regions.
-- [ ] Data export and deletion paths tested; JP-language acknowledgement template verified.
-- [ ] Breach response runbook on file (covers GDPR 72h, LGPD 2-day, APPI PPC reporting).
+- [ ] Executed SCCs + TIAs archived per US sub-processor at `private/legal/transfers/`. UK addendum executed for any UK-user-touching vendor.
+- [ ] Cookie banner active in required regions; consent state machine wired with PostHog + Sentry init gated on consent.
+- [ ] Data export tested end-to-end; signed app-local URL flow (not direct storage URL) verified; `audit_log.jsonl` in archive; `format_version` semver in `manifest.json`.
+- [ ] Account deletion path tested end-to-end including the transactional sequence per §3.3, with KMS DEK destruction LAST. Deletion-queue retry job verified.
+- [ ] First DR drill executed and documented at `private/runbooks/dr-drills.md` — including the crypto-erasure verification (delete test user, restore backup from before deletion, confirm ciphertext present but un-decryptable).
+- [ ] Incident response runbook (`private/runbooks/incident-response.md`) drafted; alerting wire-up tested with a dry-run alert (Sentry → email + Pushover/Telegram → founder phone).
+- [ ] Breach response runbook on file (covers GDPR 72h, LGPD 2-day, APPI PPC "without delay" reporting).
 - [ ] Lead EU supervisory authority identified.
 - [ ] Records of processing activities (ROPA) established.
-- [ ] Contact addresses live: `privacy@` (English), `privacy-jp@` (Japanese), `support@`, `support-jp@`.
+- [ ] Contact addresses live: `privacy@` (English), `privacy-jp@` (Japanese), `support@`, `support-jp@`. **Inbound mailbox provisioning verified** (MX records, forwarding rules, JP auto-acknowledgement template at `packages/i18n/ja/dsar-ack.json`) per `deployment.md §5.6`.
 - [ ] Marketing copy audit against §4 — **both EN and JP locales**.
 - [ ] EU representative (Prighter or equivalent) under contract once first EU sign-up arrives.
+- [ ] AGPL `/source` page live, linking to GitHub repo + deployed commit SHA.
 
 ## 12. Open questions (compliance)
 
