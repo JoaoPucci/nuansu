@@ -15,6 +15,27 @@
     "delete": "Delete",
     "confirm": "Confirm",
     "back": "Back",
-    "continue": "Continue"
+    "continue": "Continue",
+    "close": "Close",
+    "retry": "Retry",
+    "copy": "Copy"
+  },
+  "languages": {
+    "en": "English",
+    "ja": "日本語"
+  },
+  "toast": {
+    "saved": "Saved",
+    "copied": "Copied to clipboard",
+    "error_generic": "Something went wrong. Please try again."
+  },
+  "loading": {
+    "default": "Loading…"
+  },
+  "errors": {
+    "network": "Couldn't reach the server. Check your connection.",
+    "unauthorized": "Please sign in to continue.",
+    "not_found": "We couldn't find that.",
+    "rate_limited": "Too many requests. Please wait a moment."
   }
 }

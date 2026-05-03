@@ -1,0 +1,136 @@
+{
+  "chats": {
+    "list_title": "チャット",
+    "empty_title": "まだチャットがありません",
+    "empty_body": "チャットを始めて、最初のメッセージを翻訳しましょう。",
+    "new_chat_cta": "新しいチャット",
+    "new_chat_dialog_title": "新しいチャット",
+    "new_chat_name_label": "誰とのチャットですか?",
+    "new_chat_name_placeholder": "例: Aiko",
+    "new_chat_target_lang_label": "翻訳先の言語",
+    "new_chat_create_cta": "チャットを作成",
+    "archived_section": "アーカイブ済み",
+    "archive_cta": "アーカイブ",
+    "unarchive_cta": "アーカイブ解除",
+    "delete_confirm_title": "このチャットを削除しますか?",
+    "delete_confirm_body": "チャットとそのメッセージを完全に削除します。元の下書きも消えます。",
+    "delete_confirm_cta": "チャットを削除",
+    "delete_warning_pending": "未保存のローカル変更があります。それでも削除しますか?"
+  },
+  "chat_header": {
+    "target_lang_label": "翻訳先",
+    "prefs_button_label": "チャットの設定",
+    "view_source": "原文",
+    "view_both": "両方",
+    "view_target": "訳文"
+  },
+  "preferences": {
+    "title": "設定",
+    "subtitle_chat": "このチャットの設定です。空欄は既定値が使われます。",
+    "subtitle_global": "新しいチャットの既定値です。",
+    "target_lang": "翻訳先の言語",
+    "register": "文体",
+    "register_help": "翻訳の丁寧さ。空欄にすると、ナチュラルネスから推測します。",
+    "naturalness": "ナチュラルネス",
+    "naturalness_help": "0 = 厳密な直訳、100 = 完全に自然 / 口語。",
+    "my_nickname": "自分の呼び名",
+    "my_nickname_help": "このチャット内で自分をどう呼んでもらいたいか。",
+    "contact_name_src": "相手の名前(原文)",
+    "contact_name_tgt": "相手の名前(訳文)",
+    "contact_name_tgt_help": "翻訳先言語での名前の表記を任意で指定できます。",
+    "notes": "メモ",
+    "notes_help": "翻訳の助けになるもの — 文脈、語彙、避けたい表現など。",
+    "save_cta": "設定を保存",
+    "concurrent_edit_banner": "別のデバイスで設定が更新されました。再読み込みして最新版をご確認ください。"
+  },
+  "global_preferences": {
+    "title": "全体の設定",
+    "default_target_lang": "既定の翻訳先言語",
+    "default_register": "既定の文体",
+    "default_naturalness": "既定のナチュラルネス",
+    "names_are_sacred": "名前は常にそのまま保つ",
+    "explain_verbosity": "監査の詳細度",
+    "explain_terse": "簡潔",
+    "explain_standard": "標準",
+    "explain_verbose": "詳細",
+    "preferred_model_tier": "モデルティア",
+    "tier_standard": "スタンダード",
+    "tier_priority": "プライオリティ"
+  },
+  "composer": {
+    "placeholder": "メッセージを入力…",
+    "translate_cta": "翻訳",
+    "refine_cta": "調整",
+    "refine_placeholder": "どこを変えるか教えてください…",
+    "commit_cta": "送信",
+    "cancel_cta": "キャンセル",
+    "iterate_cta": "再調整",
+    "drafting_label": "下書き中",
+    "generating_label": "翻訳中…",
+    "iterating_label": "調整中…",
+    "committing_label": "送信中…"
+  },
+  "candidates": {
+    "literal_label": "直訳",
+    "natural_label": "自然訳",
+    "gloss_label": "なぜこの訳か",
+    "register_detected": "検出された文体: {{register}}",
+    "register_chosen": "選択された文体: {{register}}",
+    "name_check_preserved": "名前を保持: {{name}}",
+    "name_check_changed": "名前を変更: {{name}}"
+  },
+  "audit_points": {
+    "title": "変更点",
+    "title_empty": "変更なし — 忠実な翻訳です",
+    "accept_cta": "受け入れる",
+    "reject_cta": "却下",
+    "by_category": {
+      "name": "名前",
+      "register": "文体",
+      "idiom": "慣用句",
+      "tone": "トーン",
+      "ambiguity": "曖昧さ",
+      "omission": "省略",
+      "other": "その他"
+    }
+  },
+  "messages": {
+    "copy": {
+      "success": "コピーしました"
+    }
+  },
+  "message_bubble": {
+    "copy_label": "メッセージをコピー",
+    "history_label": "原文と監査を表示",
+    "history_drawer_title": "このメッセージの翻訳履歴",
+    "raw_draft_label": "あなたの下書き",
+    "literal_pass_label": "直訳",
+    "natural_pass_label": "自然訳",
+    "audit_label": "監査ポイント",
+    "final_label": "最終送信"
+  },
+  "drift_suggestions": {
+    "card_title": "気になる点があります",
+    "by_category": {
+      "name_reveal": "名前の更新",
+      "nickname_offer": "ニックネームの提案",
+      "register_shift": "文体の変化",
+      "context_update": "文脈の更新"
+    },
+    "evidence_label": "相手のメッセージから:",
+    "apply_cta": "適用",
+    "keep_both_cta": "両方保持",
+    "dismiss_cta": "却下",
+    "applied_toast": "設定を更新しました。"
+  },
+  "compose_hint": {
+    "did_you_mean": "{{suggested}}のことですか? ({{prior}}は以前の名前です)",
+    "rewrite_cta": "書き換え"
+  },
+  "coachmarks": {
+    "composer_first_translate": "「翻訳」をタップすると、直訳と自然訳が並んで表示されます。",
+    "audit_points_first": "すべての意味のある変更はここに表示されます。受け入れるか却下するか、理由を読むだけでもOK。",
+    "view_toggle_first": "原文、訳文、両方を切り替え — チャットごとに記憶します。",
+    "refine_first": "ピンと来ない? 普通の言葉で何を変えたいか教えてください。"
+  }
+}

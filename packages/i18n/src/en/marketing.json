@@ -1,0 +1,71 @@
+{
+  "hero": {
+    "headline": "Translation that respects what you actually said.",
+    "subhead": "A copilot for cross-language messaging that preserves names, register, and meaning. Two passes — literal and natural — and a clear audit of every change. You stay in control of what gets sent.",
+    "cta_primary": "Start free for 14 days",
+    "cta_secondary": "See how it works"
+  },
+  "demo": {
+    "caption": "A quick look at the composer, the dual-pass translation, and the audit list."
+  },
+  "how_it_works": {
+    "title": "How it works",
+    "step1": {
+      "title": "Type what you mean",
+      "body": "Write your message in your language. Names, slang, hesitation — all of it. Nuansu translates from your draft, not from a polished version of it."
+    },
+    "step2": {
+      "title": "See both passes side by side",
+      "body": "A literal pass shows what you actually said. A natural pass adapts for fluency. The audit list explains every difference."
+    },
+    "step3": {
+      "title": "Refine, accept, or send as-is",
+      "body": "One tap to apply a change, dismiss it, or rewrite. The original is always recoverable."
+    }
+  },
+  "proof": {
+    "title": "Built by someone who lives between languages",
+    "body": "Dogfooded daily on JP↔EN messaging across LINE, Tinder, and the rest. Anti-drift isn't a feature — it's the prime directive."
+  },
+  "pricing": {
+    "title": "One plan",
+    "plan_name": "Pro",
+    "price": "$12",
+    "period": "per month",
+    "trial_banner": "14 days free, no card required.",
+    "feature_unlimited": "Unlimited translations",
+    "feature_audit": "Full audit history per message",
+    "feature_export": "Export your data anytime",
+    "feature_languages": "JP ↔ EN to start; more languages coming"
+  },
+  "faq": {
+    "title": "Common questions",
+    "q1": "Will the AI rewrite my message?",
+    "a1": "Never silently. Every change appears in the audit list with a rationale. You decide what gets sent.",
+    "q2": "What about my privacy?",
+    "a2": "Your messages are encrypted at rest with a key that's unique to your account. We never train on your data. See our sub-processors page for the full vendor list.",
+    "q3": "Which languages are supported?",
+    "a3": "JP ↔ EN at launch. We're prioritising depth over breadth — more pairs as we get the quality bar right.",
+    "q4": "Can I export or delete my data?",
+    "a4": "Yes, both. Export gives you a JSON archive of your chats and audit history. Deletion is a 30-day soft delete; after that the data and the encryption key are destroyed."
+  },
+  "privacy_posture": {
+    "title": "Privacy is the first feature, not the last",
+    "body": "Per-account encryption keys, zero-data-retention with the LLM provider, full export and deletion. The DPIA is published and counsel-reviewed before public launch."
+  },
+  "footer": {
+    "support_en": "support@nuansu.app",
+    "support_jp": "support-jp@nuansu.app",
+    "status": "Status",
+    "github": "GitHub",
+    "tos": "Terms",
+    "privacy": "Privacy",
+    "sub_processors": "Sub-processors"
+  },
+  "legal": {
+    "privacy_title": "Privacy Policy",
+    "terms_title": "Terms of Service",
+    "sub_processors_title": "Sub-processors",
+    "v1_notice": "v1 — pending counsel review."
+  }
+}

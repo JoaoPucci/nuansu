@@ -1,0 +1,42 @@
+{
+  "sample_chat_banner": {
+    "label": "サンプルチャット — Aikoに返信して、Nuansuの翻訳を見てみましょう。"
+  },
+  "use_real_chats_cta": "実際のチャットを使う",
+  "fixtures": {
+    "en_ja": {
+      "message_1": {
+        "author": "mine",
+        "source": "Hey Aiko, want to grab coffee in Shibuya this weekend?",
+        "target": "Aiko、今週末Shibuyaでコーヒーでもどう?"
+      },
+      "message_2": {
+        "author": "theirs",
+        "source": "うん、いいね!Shibuya駅の近くで会おう。",
+        "target": "Sounds good! Let's meet near Shibuya station."
+      },
+      "message_3": {
+        "author": "mine",
+        "source": "Try sending Aiko a real message — type below.",
+        "target": "Aikoに実際のメッセージを送ってみよう — 下に入力してください。"
+      }
+    },
+    "ja_en": {
+      "message_1": {
+        "author": "mine",
+        "source": "Aiko、今週末Shibuyaでコーヒー行かない?",
+        "target": "Hey Aiko, want to grab coffee in Shibuya this weekend?"
+      },
+      "message_2": {
+        "author": "theirs",
+        "source": "Sure, let's meet near Shibuya station!",
+        "target": "うん、Shibuya駅の近くで会おう!"
+      },
+      "message_3": {
+        "author": "mine",
+        "source": "Aikoに本物のメッセージを送ってみよう — 下に入力。",
+        "target": "Try sending Aiko a real message — type below."
+      }
+    }
+  }
+}
