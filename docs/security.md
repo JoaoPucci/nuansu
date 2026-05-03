@@ -290,21 +290,21 @@ For a solo-founder app, a lightweight runbook is enough.
 
 - React default escaping; no `dangerouslySetInnerHTML` in v1.
 - All HTML email templated and pre-escaped.
-- Full CSP, enumerated (no wildcards). Ship `Content-Security-Policy-Report-Only` for one week first to capture violations against `/api/csp-report`, then promote to enforcing:
+- Full CSP, enumerated. Hosts are pinned where the vendor publishes a stable endpoint; subdomain wildcards (`https://*.vendor.tld`) are used only where the vendor rotates subdomains (e.g., per-org Sentry ingest, per-region Upstash REST endpoint, LINE profile-image CDN), and every wildcard host is listed with its reason in the table below the policy. Scheme-level wildcards (`*` alone, `https:`, `https://*`) are forbidden in every directive. Ship `Content-Security-Policy-Report-Only` for one week first to capture violations against `/api/csp-report`, then promote to enforcing:
 
 ```
 default-src 'self';
 script-src 'self' 'nonce-{per-request}';
 style-src 'self' 'nonce-{per-request}' 'unsafe-hashes' 'sha256-{tailwind-hash}';
-img-src 'self' data: https://*.cloudflare-ipfs.com https://lh3.googleusercontent.com https://*.line-scdn.net;
+img-src 'self' data: https://lh3.googleusercontent.com https://*.line-scdn.net;
 font-src 'self' data:;
 connect-src 'self'
   https://api.anthropic.com
   https://api.stripe.com
   https://js.stripe.com
-  https://*.upstash.io
-  https://*.posthog.com
-  https://*.sentry.io
+  https://{region}.upstash.io
+  https://{region}.i.posthog.com
+  https://o{org-id}.ingest.{region}.sentry.io
   https://challenges.cloudflare.com
   https://accounts.google.com
   https://appleid.apple.com
@@ -321,8 +321,14 @@ report-uri /api/csp-report;
 upgrade-insecure-requests;
 ```
 
+`{region}` and `{org-id}` placeholders are resolved at deploy time from env (`UPSTASH_REGION`, `POSTHOG_REGION`, `SENTRY_REGION`, `SENTRY_ORG_ID`) so the deployed policy is fully concrete with no remaining wildcards on those vendors. The remaining subdomain wildcards are documented here:
+
+| Directive + host                  | Reason for the wildcard                                                                                                                     |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `img-src https://*.line-scdn.net` | LINE profile images are served from rotating subdomains under `*.line-scdn.net` (LINE's CDN partition); LINE does not publish a fixed host. |
+
 - **Per-request nonce.** Hono middleware generates a 16-byte random nonce per request, injected into every `<script nonce="...">` and `<style nonce="...">` element rendered server-side. Client-side dynamic injection (Vite HMR in dev, react-router script preload) uses the same nonce. No `unsafe-inline` for scripts in production.
-- **Whenever a vendor endpoint is added** (new analytics tool, payment integration, etc.) the CSP is updated in the same PR; the CI tests assert no `*` wildcards in any directive.
+- **Whenever a vendor endpoint is added** (new analytics tool, payment integration, etc.) the CSP is updated in the same PR. The CI fitness function (`docs/quality.md §3.1`) asserts (a) no scheme-level wildcards (`*`, `https:`, `https://*`) appear in any directive, and (b) every host containing `*.` is listed in the wildcard-justification table above.
 
 ### 13.2 SQL injection
 
@@ -361,7 +367,7 @@ The full header set ships from a Hono middleware that applies to every response.
 
 ```
 Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-Content-Security-Policy: <see §13.1 — full enumeration, no wildcards, per-request nonce>
+Content-Security-Policy: <see §13.1 — full enumeration, no scheme-level wildcards, per-request nonce>
 Referrer-Policy: strict-origin-when-cross-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
 X-Content-Type-Options: nosniff
