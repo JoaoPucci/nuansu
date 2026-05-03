@@ -73,6 +73,17 @@ These run alongside the rest of the suite (Vitest), but they're not testing user
 | Every prompt version is registered in `packages/prompts/index.ts`                                                                                              | `packages/prompts/**`                                                                                                                          | Vitest scan: every file matching `v*.ts` in prompts must be exported from the index                                                                    |
 | Bundle composition: no server-only deps reach the client bundle (e.g., `pino`, `@anthropic-ai/sdk`, `drizzle-orm`)                                             | Vite bundle output                                                                                                                             | `size-limit` config with explicit per-bundle deny lists                                                                                                |
 | Every i18n key used in the codebase exists in both `en` and `ja` namespaces                                                                                    | `packages/i18n/**`                                                                                                                             | Vitest scan: extract all `t('...')` keys via AST; assert they exist in every locale file                                                               |
+| Every `user_id` column has type `text` (matches `users.id`)                                                                                                    | `apps/web/server/db/schema.ts`                                                                                                                 | Postgres `pg_attribute` introspection in an integration test; type mismatch silently breaks FK enforcement and RLS                                     |
+| Every encrypted (`bytea`) user-content column has a paired `*_nonce bytea` sibling                                                                             | `apps/web/server/db/schema.ts`                                                                                                                 | Schema introspection: for every `bytea` column matching the encrypted-fields catalogue (back_end §3.1), assert a same-prefix `*_nonce bytea` exists    |
+| Every assignment to a known-encrypted column originates from a call to `encryptForUser(...)` (taint-style)                                                     | `apps/web/server/**`                                                                                                                           | ts-morph scan: trace the RHS of every `db.insert/update` setting an encrypted column; CI-fail if it doesn't trace back to the encryption wrapper       |
+| Every authenticated POST/PUT/PATCH/DELETE Hono route has zod body validation                                                                                   | `apps/web/server/**`                                                                                                                           | Vitest scan over the registered route table; for every state-changing handler, assert chain includes `zValidator('json', SomeSchema)`                  |
+| RLS is enabled on every user-scoped application table AND every `auth_*` table                                                                                 | `apps/web/server/db/schema.ts` + Postgres                                                                                                      | `pg_class.relrowsecurity` introspection; whitelist for explicitly system tables                                                                        |
+| Raw `SET LOCAL nuansu.user_id` is banned outside the `db.forUser` wrapper                                                                                      | `apps/web/server/**`                                                                                                                           | grep / AST scan; only the wrapper may set the session var, and only via the SECURITY DEFINER `nuansu.set_user_id` setter                               |
+| `nuansu_app` role cannot SELECT from `auth_users` (or any `auth_*` table)                                                                                      | DB roles + grants                                                                                                                              | Integration test: connect as `nuansu_app`; `SELECT FROM auth_users` raises `permission denied`                                                         |
+| CSP has no wildcard (`*`) directives                                                                                                                           | CSP middleware config                                                                                                                          | Unit test parsing the configured CSP string; assert no token is `*`                                                                                    |
+| Every coachmark ID used in code is a member of the `CoachmarkId` schema enum                                                                                   | `apps/web/src/**` + `packages/schemas`                                                                                                         | ts-morph scan: extract every `useCoachmark('...')` arg + dismiss-coachmark body validators; assert each is in the `CoachmarkId` const-tuple            |
+| Every bespoke component has ≥ 4 Ladle stories (default / loading / error / edge)                                                                               | `apps/web/src/components/**`, `apps/web/src/features/*/components/**`                                                                          | ts-morph scan: for each `*.tsx` (excl. `.stories.tsx` / `index.ts`), assert sibling `.stories.tsx` exists and exports ≥ 4 named stories                |
+| Cached prompt prefix is byte-identical across all input variation (no per-user content interpolation)                                                          | `packages/prompts/src/v*/cached-prefix.ts`                                                                                                     | Property test: build prompt with N random user inputs; assert layer with `label='universal_v1'` is byte-stable                                         |
 
 **When to add a new fitness function.** Whenever a documented architectural rule could be silently violated and you wouldn't notice. The rule is: if losing this invariant would degrade the system in a way that's invisible to feature tests, write a fitness function. Example triggers: a new "must-go-through-wrapper" rule, a new column that must always be encrypted, a new banned import.
 
@@ -82,21 +93,50 @@ These run alongside the rest of the suite (Vitest), but they're not testing user
 
 Every PR runs these. A red gate blocks merge.
 
-| Gate                  | Threshold                     | Tool                        | Lands in phase |
-| --------------------- | ----------------------------- | --------------------------- | -------------- |
-| TypeScript strict     | must pass                     | `tsc --noEmit`              | 1              |
-| ESLint clean          | zero warnings                 | eslint flat config          | 1              |
-| Cognitive complexity  | ≤ 15 per function             | `eslint-plugin-sonarjs`     | 1              |
-| Cyclomatic complexity | ≤ 12 per function             | `eslint-plugin-sonarjs`     | 1              |
-| Coverage (non-UI)     | ≥ 80% line, ≥ 75% branch      | Vitest with c8              | 8              |
-| **CRAP score**        | **≤ 30 per function**         | custom CI script (see §4.1) | 8              |
-| Lighthouse mobile     | ≥ 90 on PA/Acc/BP/SEO         | `@lhci/cli`                 | 8              |
-| Bundle size           | ≤ 180 KB gz initial JS        | `size-limit`                | 8              |
-| Axe a11y              | 0 serious/critical violations | axe-core via Playwright     | 3, 5, 8        |
-| Vitest bench drift    | ≤ 25% from baseline           | `vitest --bench`            | 2, 6, 8        |
-| Format check          | Prettier-clean                | `prettier --check`          | 1              |
+| Gate                          | Threshold                                        | Tool                                                                | Lands in phase |
+| ----------------------------- | ------------------------------------------------ | ------------------------------------------------------------------- | -------------- |
+| TypeScript strict             | must pass                                        | `tsc --noEmit`                                                      | 1              |
+| ESLint clean                  | zero warnings                                    | eslint flat config                                                  | 1              |
+| Cognitive complexity          | ≤ 15 per function                                | `eslint-plugin-sonarjs`                                             | 1              |
+| Cyclomatic complexity         | ≤ 12 per function                                | `eslint-plugin-sonarjs`                                             | 1              |
+| Coverage (non-UI)             | ≥ 80% line, ≥ 75% branch                         | Vitest with c8                                                      | 8              |
+| **CRAP score**                | **≤ 30 per function**                            | custom CI script (see §4.1)                                         | 8              |
+| Lighthouse mobile             | ≥ 90 on PA/Acc/BP/SEO                            | `@lhci/cli`                                                         | 8              |
+| **Per-route LCP**             | ≤ documented per-route budget (see §4.2)         | `@lhci/cli` `assert.assertions` per URL                             | 8              |
+| **Per-route TBT**             | ≤ documented per-route budget (see §4.2)         | `@lhci/cli` `assert.assertions` per URL                             | 8              |
+| **Streaming first-token p50** | ≤ 1.2 s against stub provider                    | Playwright perf-trace test                                          | 8              |
+| Bundle size                   | ≤ 180 KB gz initial JS                           | `size-limit`                                                        | 8              |
+| Axe a11y                      | 0 serious/critical violations                    | axe-core via Playwright                                             | 3, 5, 8        |
+| Vitest bench drift            | ≤ 25% from baseline                              | `vitest --bench`                                                    | 2, 6, 8        |
+| Format check                  | Prettier-clean                                   | `prettier --check`                                                  | 1              |
+| **CI wall-clock**             | PR CI ≤ 12 min p95 (week-over-week growth ≤ 25%) | per-job duration capture in CI; fitness-test on the rolling average | 8              |
 
 UI components are exempt from the line-coverage threshold because they're covered by Ladle stories + Playwright e2e instead. The exemption is enforced by the c8 config (`coveragePathIgnorePatterns: ['apps/web/src/components', 'apps/web/src/features/*/components']`), not by goodwill.
+
+### 4.2 Per-route performance budgets
+
+A global Lighthouse ≥ 90 averages out hot spots — a slow chat view hides behind a fast marketing page. Every prerendered or app route declares its own LCP / TBT budget in the Lighthouse CI config; regressions on a specific route fail the gate even if the global average is fine. AI-heavy work means a per-component change can degrade one route without anyone noticing — the per-route budget catches it.
+
+| Route                | LCP (mobile, p75) | TBT (mobile, p75) | Notes                                                                           |
+| -------------------- | ----------------- | ----------------- | ------------------------------------------------------------------------------- |
+| `/` (landing)        | ≤ 1.8 s           | ≤ 200 ms          | Prerendered; mostly text + one image. Below this, marketing conversion suffers. |
+| `/pricing`           | ≤ 2.0 s           | ≤ 200 ms          | Prerendered; pricing card + FAQ.                                                |
+| `/privacy`, `/terms` | ≤ 1.5 s           | ≤ 100 ms          | Prerendered; pure text.                                                         |
+| `/auth/sign-in`      | ≤ 1.5 s           | ≤ 150 ms          | Cold-cache TLS handshake dominated; minimal JS.                                 |
+| `/app/chats`         | ≤ 2.5 s           | ≤ 300 ms          | First authenticated render; chat-list virtualised; budget covers prefs preload. |
+| `/app/chats/:id`     | ≤ 2.8 s           | ≤ 350 ms          | Composer + audit panel + virtualised messages — the heaviest authed route.      |
+| `/app/settings/*`    | ≤ 2.0 s           | ≤ 250 ms          | Form-heavy; should be light.                                                    |
+
+The streaming first-token target (≤ 1.2 s p50 from request to first SSE chunk) is enforced by a Playwright perf-trace test against a stub LLM provider configured for known fixed latency — measures the orchestrator + parser + render path, not Anthropic's response time.
+
+### 4.3 CI wall-clock budget
+
+AI-assisted iteration produces high PR/CI volume. Without a ceiling, slow CI erodes the TDD loop ("just push and grab a coffee" becomes the norm). Targets:
+
+- **PR CI total ≤ 12 minutes p95.** Captured per-PR; rolling average published in the CI summary.
+- **Week-over-week growth ≤ 25%.** A fitness test on the rolling average fails if total CI time grows faster than that without an explicit config opt-in (e.g., a deliberately-added e2e suite).
+- **Per-job ceilings:** typecheck/lint/format ≤ 90 s; unit ≤ 3 min; e2e ≤ 6 min; bench ≤ 4 min; lighthouse ≤ 4 min; bundle-size ≤ 1 min.
+- **Sharding triggers:** if any single job exceeds its ceiling for two consecutive weeks, shard it (test parallelism, route-split for e2e, etc.) before the ceiling is raised.
 
 ### 4.1 CRAP score
 
@@ -126,17 +166,29 @@ Use `fast-check` for any pure module with multiple input shapes. Pattern: **one 
 
 **Modules that get a property test in v1:**
 
-| Module                                   | Invariant                                                                                |
-| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| SSE chunk parser                         | Any byte sequence either parses to a valid chunk or returns a typed error — never throws |
-| `TranslationStreamChunk` zod schema      | `schema.parse(schema.parse(x))` is idempotent for any valid `x`                          |
-| Name-lock matcher (compose-time hint)    | Matches are case-insensitive, word-boundary-respecting, never overlap                    |
-| Audit point reducer                      | Any action sequence on any state yields a valid state                                    |
-| Prompt builder                           | Output never contains banned PII fields from §6 logger redactor list                     |
-| Recent-thread window selector            | Output respects count cap (≤ 10) AND token cap (≤ 2000) for any input                    |
-| Quota Lua script                         | Concurrent translate requests never exceed the daily cap                                 |
-| Envelope encryption (XChaCha20-Poly1305) | `decrypt(encrypt(plaintext, aad), aad) === plaintext` for any plaintext + aad            |
-| AAD-mismatch decryption                  | `decrypt(encrypt(p, aad1), aad2)` always rejects when `aad1 !== aad2`                    |
+| Module                                   | Invariant                                                                                                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE chunk parser                         | Any byte sequence either parses to a valid chunk or returns a typed error — never throws                                                                                                            |
+| `TranslationStreamChunk` zod schema      | `schema.parse(schema.parse(x))` is idempotent for any valid `x`                                                                                                                                     |
+| Name-lock matcher (compose-time hint)    | Matches are case-insensitive, word-boundary-respecting, never overlap                                                                                                                               |
+| Audit point reducer                      | Any action sequence on any state yields a valid state                                                                                                                                               |
+| Prompt builder                           | Output never contains banned PII fields from §6 logger redactor list                                                                                                                                |
+| Recent-thread window selector            | Output respects count cap (≤ 10) AND token cap (≤ 2000) for any input                                                                                                                               |
+| Quota Lua script                         | Concurrent translate requests never exceed the daily cap                                                                                                                                            |
+| Envelope encryption (XChaCha20-Poly1305) | `decrypt(encrypt(plaintext, aad), aad) === plaintext` for any plaintext + aad                                                                                                                       |
+| AAD-mismatch decryption                  | `decrypt(encrypt(p, aad1), aad2)` always rejects when `aad1 !== aad2`                                                                                                                               |
+| Audit-point assembly                     | For any permutation of a fixed chunk multiset, the merged `TranslationObject` is structurally equal — assembly is order-independent so live-stream and replay/restoration produce identical objects |
+| SSE parser transport pathologies         | Splitting any known-good byte stream at every byte index yields the same final state as the un-split stream (catches mid-multibyte UTF-8 boundary bugs, mid-event truncation)                       |
+| Cached-prompt-prefix invariance          | `buildPromptV1(input).layers.find(label='universal_v1').text` is byte-stable across any input variation (no per-user content interpolation)                                                         |
+
+**Property tests are not enough for concurrency.** fast-check is single-threaded; properties tagged "concurrent" in name actually need a real-Redis or real-Postgres harness with `Promise.all(N)`. Documented as integration tests, not properties:
+
+| Module                       | Concurrency invariant                                                                                                                                                 | Harness                                                                                                    |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Quota Lua script             | `N=200` concurrent translate requests against a near-cap user produce exactly `min(N, cap)` admissions                                                                | dockerised Redis + `Promise.all`; chaos variant with 50ms sleep between read/write to maximise race window |
+| Last-write-wins preferences  | Two PUTs in quick succession: second wins; response carries the version field client banner uses                                                                      | dockerised Postgres + `Promise.all` + assertion on the response version                                    |
+| Idempotency-key replay       | Same key + same body → cached replay; same key + different body → 409; key during in-flight stream → 202 sentinel                                                     | dockerised Redis + matrix of the 4 cases                                                                   |
+| AAD row-mover bug simulation | A row migrated between users by a buggy migration produces an `internal` error on read (not `unauthorised`/`not_found`); error payload contains zero ciphertext bytes | hand-craft row with AAD bound to user A; attempt read as user B via the wrapper                            |
 
 **Anti-patterns to avoid:**
 
@@ -144,7 +196,44 @@ Use `fast-check` for any pure module with multiple input shapes. Pattern: **one 
 - Generating arbitraries that don't actually exercise the function (e.g., always-empty strings).
 - Properties that just restate the implementation. Properties name the _invariant_, not the algorithm.
 
-## 6. Mutation testing — deferred to v2
+## 6. LLM evaluation strategy
+
+Fixture replay (canned chunk sequences from `apps/web/server/llm/fixtures/`) covers the orchestrator's deterministic behaviour but not the LLM's. The LLM is the product moat AND the most expensive thing to regress silently — a model-side schema change, a tightened safety filter, or a prompt edit can drop quality without any test going red. Four complementary harnesses:
+
+### 6.1 Live-provider conformance (output-schema drift)
+
+A nightly **non-blocking** GitHub Actions job runs ~10 representative prompts against the real Anthropic Sonnet/Haiku endpoints, parses the SSE through the production parser, and validates every chunk against the production zod schema (`TranslationStreamChunkSchema` etc.). Failures alert (not block PRs) and **block prompt-version promotion** (a `vN+1` can't be promoted to default until conformance is green for the new prompt against the live model).
+
+Lives in `apps/web/server/llm/__live_eval__/conformance.test.ts` (separate Vitest project; gated by env var so it doesn't run on developer machines or PR CI).
+
+### 6.2 Drift-detection precision/recall regression
+
+Drift detection is the most fragile LLM behaviour: false positives nag the user; false negatives accumulate silently. Without a labelled corpus, a prompt edit can halve recall and the only signal is dogfood weeks later.
+
+**Corpus shape**: ~50 `recent_thread` slices per category (`name_reveal`, `nickname_offer`, `register_shift`, `context_update`), each with `expected_suggestion: PrefsSuggestion | null`. Hand-labelled by the founder; lives at `private/llm-eval/drift-corpus/` (gitignored — contains representative-but-realistic conversation examples).
+
+**Harness**: per-category precision and recall reported on every prompt-version PR. CI gate per category: **recall ≥ 0.7, precision ≥ 0.8**. A prompt change that drops below either threshold blocks merge.
+
+### 6.3 Prompt-injection / safety regression
+
+~20 adversarial inputs covering the documented attack vectors (delimiter-escape attempts, role-impersonation, "ignore prior instructions," cross-language injection). For each, assert the model:
+
+- Still emits literal + natural for the actual draft.
+- Never honours the injected instruction (e.g., never returns only `{}`).
+- Never emits a `prefs_suggestion` whose `evidence_excerpt` contains an injection marker (server-side regex screen catches this; the test asserts the screen fires).
+
+Runs as part of the prompt eval harness; lives at `apps/web/server/llm/__live_eval__/injection.test.ts`. Failures block the prompt-version promotion.
+
+### 6.4 Cost + cache-hit regression
+
+A prompt edit that bloats the cached prefix or breaks the cache-key prefix tanks the cache-hit rate AND drives up token bills. Per prompt-version PR:
+
+- **Cost regression**: report token counts (input + output + cached) for the corpus run; CI gate fails if total token count grows >25% vs the prior `vN`.
+- **Cache-hit regression**: report `(cached_tokens / input_tokens)` ratio for the corpus run; CI gate fails if the ratio drops by >10 percentage points vs the prior `vN`.
+
+**Test data factories.** Across all four harnesses, fixture inputs are built via shared zod-derived mock factories in `test/factories/` (e.g., `@anatine/zod-mock` against `TranslateRequestSchema`). AI tools left to ad-hoc fixtures regenerate them per test, drift them subtly, and miss schema changes — factories prevent that.
+
+## 7. Mutation testing — deferred to v2
 
 Mutation testing (Stryker JS) verifies that tests actually _test_: it mutates the production code and checks whether tests fail. Tests that pass against mutated code are useless tests.
 
@@ -163,7 +252,7 @@ Mutation testing (Stryker JS) verifies that tests actually _test_: it mutates th
 - Wire as a non-blocking nightly job in CI; surface the score as a Slack/email digest.
 - Promote to a blocking gate only if the team agrees the score is stable.
 
-## 7. TDD anti-patterns to avoid
+## 8. TDD anti-patterns to avoid
 
 Mechanical tests are mechanical tests — they can pass without verifying anything useful. Watch for:
 
@@ -174,7 +263,7 @@ Mechanical tests are mechanical tests — they can pass without verifying anythi
 - **Coverage as goal, not signal.** 100% coverage from low-quality tests is worse than 70% coverage from high-quality ones. The CRAP gate (§4.1) catches the trap of "covered but untested."
 - **Tests that mock the thing being tested.** If you're mocking `db.forUser` while testing `db.forUser`, you're testing your mock.
 
-## 8. Pre-commit hooks (lefthook)
+## 9. Pre-commit hooks (lefthook)
 
 Sub-30-second feedback before a commit lands. Configured in `lefthook.yml` at the repo root:
 
@@ -205,16 +294,18 @@ pre-push:
 
 Pre-push runs the full unit + integration suite; e2e and Lighthouse only run in CI. Skipping hooks via `--no-verify` is forbidden by project policy except for explicit emergency hotfixes signed off in the PR description.
 
-## 9. Required dependencies
+## 10. Required dependencies
 
 - `vitest` + `@vitest/coverage-v8` (c8) — unit + integration + coverage
 - `fast-check` — property-based testing
 - `@playwright/test` + `@axe-core/playwright` — e2e + a11y
 - `eslint-plugin-sonarjs` — complexity gates
-- `@lhci/cli` — Lighthouse CI
+- `@lhci/cli` — Lighthouse CI (with per-route `assert.assertions` per §4.2)
 - `size-limit` + `@size-limit/preset-app` — bundle-size gate
 - `lefthook` — pre-commit hooks
 - `prettier` — format check
+- `ts-morph` — AST-walking fitness tests (taint-style write-path enforcement, route-table introspection, coachmark-ID enum check, story-coverage scan; see §3.1)
+- `@anatine/zod-mock` (or equivalent) — zod-derived test data factories (§6.4)
 - `@stryker-mutator/core` + `@stryker-mutator/vitest-runner` — deferred to v2
 
 ## 11. AI-assisted development guardrails
