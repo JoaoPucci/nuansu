@@ -437,6 +437,7 @@ Nuansu is a translation copilot — we facilitate communication, we don't genera
 - [ ] Marketing copy audit against §4 — **both EN and JP locales**.
 - [ ] EU representative (Prighter or equivalent) under contract once first EU sign-up arrives.
 - [ ] AGPL `/source` page live, linking to GitHub repo + deployed commit SHA.
+- [ ] **DCO enforcement in CI.** Add a workflow (e.g. the `dcoapp/app` GitHub App or a `Signed-off-by`-grep job in `ci.yml`) that fails any PR with an unsigned commit, replacing the current manual + reviewer-eyeball check documented in `AGENTS.md §3.5`. Without CI enforcement, an unsigned external contribution can merge silently — tolerable while the contributor set is AI tools + the data controller, but a real exposure once the repo is public and accepting outside PRs.
 
 ## 12. Open questions (compliance)
 
