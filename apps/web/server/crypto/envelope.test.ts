@@ -65,11 +65,11 @@ describe("envelope — AAD binds ciphertext to (user, table, column, row) (secur
     ).rejects.toThrow();
   });
 
-  it("decryption fails when column changes (intra-row column-swap blocked — Codex P1 / audit SEC #22)", async () => {
-    // The exact attack the audit + Codex flagged: an attacker with DB
-    // write access swaps `final_source_text` and `final_target_text`
-    // ciphertext+nonce pairs within the same row. Without column in AAD,
-    // AEAD authenticates successfully and the swap is undetectable.
+  it("decryption fails when column changes (intra-row column-swap blocked)", async () => {
+    // Attack: an actor with DB write access swaps the
+    // `final_source_text` and `final_target_text` ciphertext+nonce
+    // pairs within the same row. Without column in AAD, AEAD
+    // authenticates successfully and the swap is undetectable.
     const enc = await encryptForUser(
       dek,
       USER_A,
