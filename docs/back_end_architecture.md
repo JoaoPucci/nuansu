@@ -484,19 +484,25 @@ The predicate calls a `SECURITY DEFINER` function `nuansu.current_user_id()` rat
 -- failure and the function returns NULL → RLS policies match nothing.
 CREATE FUNCTION nuansu.current_user_id() RETURNS text
 LANGUAGE plpgsql SECURITY DEFINER STABLE
+SET search_path = nuansu, pg_catalog, pg_temp
 AS $$
 DECLARE
-  proof text := current_setting('nuansu.session_proof', true);
+  proof text := pg_catalog.current_setting('nuansu.session_proof', true);
   parts text[];
 BEGIN
   IF proof IS NULL THEN RETURN NULL; END IF;
-  parts := string_to_array(proof, ':');  -- "<user_id>:<hmac>"
-  IF cardinality(parts) <> 2 THEN RETURN NULL; END IF;
+  parts := pg_catalog.string_to_array(proof, ':');  -- "<user_id>:<hmac>"
+  IF pg_catalog.cardinality(parts) <> 2 THEN RETURN NULL; END IF;
   IF NOT nuansu.verify_hmac(parts[1], parts[2]) THEN RETURN NULL; END IF;
   RETURN parts[1];
 END;
 $$;
+ALTER FUNCTION nuansu.current_user_id() OWNER TO nuansu_migrate;
+REVOKE ALL ON FUNCTION nuansu.current_user_id() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION nuansu.current_user_id() TO nuansu_app, nuansu_auth;
 ```
+
+The `SET search_path = nuansu, pg_catalog, pg_temp` clause is the standard `SECURITY DEFINER` hardening (PostgreSQL safe-definer guidance). Without a pinned search path, an attacker who controls any writable schema in the role's `search_path` can shadow unqualified built-ins (`string_to_array`, `cardinality`) used inside the function and influence the authorisation decision — privilege escalation against the exact function that gates RLS. The pinned path plus schema-qualified built-ins (`pg_catalog.*`) closes that surface. Same hardening as the `nuansu_auth_user_to_app_user()` trigger function in §3 and any future `SECURITY DEFINER` we ship — a fitness test (`docs/quality.md §3.1`) asserts every `SECURITY DEFINER` function declares a pinned `search_path`.
 
 The Drizzle `db.forUser(user)` wrapper computes `proof = user_id || ':' || hmac(server_secret, user_id)` and `SET LOCAL nuansu.session_proof = ...` at the start of every transaction. Server-secret rotation is documented in `security.md §11`.
 
