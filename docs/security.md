@@ -295,13 +295,16 @@ For a solo-founder app, a lightweight runbook is enough.
 
 ```
 default-src 'self';
-script-src 'self' 'nonce-{per-request}';
+script-src 'self' 'nonce-{per-request}'
+  https://js.stripe.com
+  https://challenges.cloudflare.com;
 style-src 'self' 'nonce-{per-request}' 'unsafe-hashes' 'sha256-{tailwind-hash}';
 img-src 'self' data: https://lh3.googleusercontent.com https://*.line-scdn.net;
 font-src 'self' data:;
 connect-src 'self'
   https://api.anthropic.com
   https://api.stripe.com
+  https://checkout.stripe.com
   https://js.stripe.com
   https://{region}.upstash.io
   https://{region}.i.posthog.com
@@ -311,7 +314,11 @@ connect-src 'self'
   https://appleid.apple.com
   https://access.line.me
   https://api.line.me;
-frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com;
+frame-src 'self'
+  https://js.stripe.com
+  https://hooks.stripe.com
+  https://checkout.stripe.com
+  https://challenges.cloudflare.com;
 frame-ancestors 'none';
 form-action 'self';
 base-uri 'self';
@@ -321,6 +328,10 @@ manifest-src 'self';
 report-uri /api/csp-report;
 upgrade-insecure-requests;
 ```
+
+**Why `js.stripe.com` and `challenges.cloudflare.com` appear in `script-src`.** Both vendors deliver their integration via a `<script src="...">` tag (Stripe.js loads from `https://js.stripe.com/v3/`; Cloudflare Turnstile loads from `https://challenges.cloudflare.com/turnstile/v0/api.js`). Without these origins in `script-src`, payment flows + signup-with-Turnstile would be blocked by the CSP. The per-request nonce still applies to our own scripts; these external origins are explicitly allow-listed.
+
+**Why `checkout.stripe.com` appears in `connect-src` + `frame-src`.** Stripe Checkout (used for the upgrade flow per `back_end_architecture.md §8`) redirects to `https://checkout.stripe.com/...` and posts back via XHR/fetch on completion. Without these directives, the Checkout session can't complete in-browser.
 
 `{region}` and `{org-id}` placeholders are resolved at deploy time from env (`UPSTASH_REGION`, `POSTHOG_REGION`, `SENTRY_REGION`, `SENTRY_ORG_ID`) so the deployed policy is fully concrete with no remaining wildcards on those vendors. The remaining subdomain wildcards are documented here:
 
