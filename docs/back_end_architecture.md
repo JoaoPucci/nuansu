@@ -797,7 +797,7 @@ When voice / date-mode arrives, a real worker (BullMQ on Upstash) replaces these
 
 ### 8.1 Stripe
 
-- Single endpoint, signature-verified with constant-time comparison (`Stripe-Signature` HMAC; `crypto.subtle.timingSafeEqual`).
+- Single endpoint, signature-verified with constant-time comparison: `Stripe-Signature` HMAC compared via the `timingSafeEqualBytes` length-safe wrapper from `security.md §13.6` (wraps `node:crypto` `timingSafeEqual` with an equal-length guard so a malformed signature returns 400 instead of 500).
 - **Replay-protected via the `webhook_events` table** (§3.1). Insert `(event_id, source='stripe', payload_hash=sha256(body))` with `ON CONFLICT (event_id) DO NOTHING`; reject if `processed_at` is already set OR if `payload_hash` doesn't match the stored hash (guards against signed-payload mutation). Set `processed_at` only after the side-effects commit.
 - Events handled: `checkout.session.completed`, `customer.subscription.created/updated/deleted`, `invoice.payment_succeeded`, `invoice.payment_failed`.
 - Side effects: update `subscriptions`, update entitlements, send transactional email.
