@@ -143,14 +143,23 @@ CREATE TABLE auth_accounts (
   expires_at              timestamptz,
   created_at              timestamptz NOT NULL DEFAULT now(),
   UNIQUE (provider_id, account_id),
-  -- Invariant: if the encrypted column is non-NULL, the plaintext column
-  -- must be NULL. The before-hook clears the plaintext fields BEFORE
-  -- Better Auth writes the row (see §4.1), so plaintext never reaches
-  -- durable storage. A fitness test (docs/quality.md §3.1) asserts no
-  -- committed row violates this CHECK against a populated test DB.
-  CHECK (access_token IS NULL OR access_token_enc IS NULL),
-  CHECK (refresh_token IS NULL OR refresh_token_enc IS NULL),
-  CHECK (id_token IS NULL OR id_token_enc IS NULL)
+  -- Invariant 1: plaintext OAuth-token columns MUST always be NULL on
+  -- committed rows. The before-hook (§4.1) intercepts Better Auth's write
+  -- and moves any plaintext into the paired _enc + _enc_nonce columns
+  -- before the INSERT/UPDATE reaches the table. Any write path that
+  -- bypasses the hook — a regression, a future Better Auth code path
+  -- that skips hooks, a manual SQL — fails here loudly instead of
+  -- silently storing plaintext.
+  CHECK (access_token IS NULL),
+  CHECK (refresh_token IS NULL),
+  CHECK (id_token IS NULL),
+  -- Invariant 2: encrypted column and its nonce are paired. Both
+  -- populated together (real ciphertext) or both NULL (no token issued
+  -- by this provider). Catches a partial-encrypt regression that wrote
+  -- ciphertext but forgot the nonce — the row would be undecryptable.
+  CHECK ((access_token_enc IS NULL) = (access_token_enc_nonce IS NULL)),
+  CHECK ((refresh_token_enc IS NULL) = (refresh_token_enc_nonce IS NULL)),
+  CHECK ((id_token_enc IS NULL) = (id_token_enc_nonce IS NULL))
 );
 
 CREATE TABLE auth_verification_tokens (
