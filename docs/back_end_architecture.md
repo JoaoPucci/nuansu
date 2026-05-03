@@ -120,18 +120,20 @@ CREATE TABLE auth_accounts (
   provider_id             text NOT NULL,                 -- 'email', 'google', 'apple', 'line'
   account_id              text NOT NULL,                 -- provider's user id
   -- Better Auth-library-managed columns. Kept as `text` per the library's
-  -- account-adapter contract (Better Auth writes plaintext here on OAuth
-  -- callback). The columns below are NULLed by the
-  -- `databaseHooks.account.create.after` and `account.update.after` hooks
-  -- inside the same transaction as the Better Auth write, so plaintext
-  -- never durably persists. See §4.1 (Auth) for the hook implementation.
+  -- account-adapter contract; cleared to NULL by the
+  -- `databaseHooks.account.create.before` / `update.before` hooks BEFORE
+  -- Better Auth writes the row, so plaintext never reaches durable
+  -- storage. (`after` hooks fire post-commit in Better Auth v1.5+ — using
+  -- one here would commit plaintext first and a hook failure would leave
+  -- it exposed.) See §4.1 (Auth) for the hook implementation.
   access_token            text,
   refresh_token           text,
   id_token                text,
   -- Our additions: envelope-encrypted ciphertext + per-field nonces
   -- (XChaCha20-Poly1305; AAD per security.md §4.2). Populated by the
-  -- after-write hook from the just-written plaintext columns above, in the
-  -- same transaction as the NULLing of those columns.
+  -- pre-write hook from the row Better Auth is about to write; the
+  -- plaintext fields are cleared in the same hook before the row reaches
+  -- the database.
   access_token_enc        bytea,
   access_token_enc_nonce  bytea,
   refresh_token_enc       bytea,
@@ -565,22 +567,35 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 60 * 5 } }, // 5min cookie cache
   trustedOrigins: [env.APP_URL],
 
-  // OAuth-token encryption hook. Better Auth writes the OAuth tokens to
-  // `auth_accounts.{access_token, refresh_token, id_token}` as plaintext
-  // (its library contract — those columns are kept as `text` per §3.1).
-  // This after-write hook fires inside the same transaction as Better
-  // Auth's INSERT/UPDATE; it encrypts each non-null token via the
-  // envelope wrapper and overwrites the plaintext columns with NULL
-  // before commit. Net effect: plaintext lives for the duration of one
-  // transaction; only ciphertext is durable. The CHECK constraints on
-  // the table enforce the resulting invariant. See security.md §4.2.
+  // OAuth-token encryption hook. Better Auth's account adapter writes
+  // OAuth tokens to `auth_accounts.{access_token, refresh_token, id_token}`
+  // as plaintext (library contract; those columns are kept as `text` per
+  // §3.1). The `before` hook receives the row Better Auth is about to
+  // write, encrypts each non-null token into the paired `_enc` +
+  // `_enc_nonce` columns, and clears the plaintext fields BEFORE Better
+  // Auth issues the INSERT/UPDATE. Net effect: plaintext never touches
+  // the database; only ciphertext is ever durable. The CHECK constraints
+  // on the table enforce the resulting invariant. See security.md §4.2.
+  //
+  // Critical: the `after` hook fires post-commit in Better Auth v1.5+,
+  // so using it here would let plaintext tokens commit to disk first
+  // and any hook failure between commit and the encrypt-and-NULL would
+  // leave them durably exposed. Always use `before` for this.
   databaseHooks: {
     account: {
-      create: { after: encryptOAuthTokensInPlace },
-      update: { after: encryptOAuthTokensInPlace },
+      create: { before: encryptOAuthTokenFields },
+      update: { before: encryptOAuthTokenFields },
     },
   },
 });
+
+// encryptOAuthTokenFields receives `{ data }` where `data` is the row
+// Better Auth is about to write. Returns `{ data: <transformed> }` with
+// each non-null token field encrypted into its `_enc` + `_enc_nonce`
+// pair and the plaintext field cleared. Async: the per-user DEK is
+// fetched from the KMS-backed cache; AAD is built from
+// (user_id, "auth_accounts", "<column>", row_id). See
+// security.md §4.2 + apps/web/server/auth/encrypt-oauth-tokens.ts.
 
 // Magic-link issue + verify is a custom flow at
 // `apps/web/server/auth/magic-link.ts` — Better Auth's `magicLink()`
