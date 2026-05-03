@@ -177,7 +177,10 @@ Two distinct touch-points:
 
 ### 3.5 Right to opt out of analytics
 
-- Settings toggle: "Send anonymous usage analytics" (opt-in by default for non-EU; opt-in _required_ for EU users to fire).
+- Settings toggle: "Send anonymous usage analytics."
+  - **EU + UK users**: opt-in. Analytics OFF until the user explicitly consents via the cookie banner; PostHog SDK does not initialise until consent fires. Required by GDPR Art. 7 + ePrivacy Directive.
+  - **Non-EU users (US, JP, BR, AU, all other regions)**: opt-out. Analytics ON by default with the settings toggle enabled; user can disable in Settings at any time. Permitted under APPI (no general consent requirement for analytics that don't process sensitive data) and CCPA (right-to-opt-out mechanism is the toggle itself). The "right to object" disclosure is included in the privacy policy.
+- The opt-out version still emits zero PII to PostHog (no email, no message content, no IP after PostHog's anonymisation) — only `event_name` + bucketed counts. The toggle controls whether PostHog initialises at all, not whether it sees PII.
 
 ## 4. Marketing & positioning constraints
 
@@ -295,7 +298,7 @@ The current ROPA template ships in a private location, not the public repo.
 | Stripe                     | Payments + Stripe Tax                                                         | US/EU                              | DPA + SCCs (Module 2) + EU-US DPF (Stripe certified)                        |
 | Resend                     | Transactional email (Better Auth magic links + Stripe receipts + system mail) | US                                 | DPA + SCCs (Module 2)                                                       |
 | Sentry                     | Error monitoring                                                              | US (EU plan available)             | DPA + SCCs (Module 2)                                                       |
-| PostHog                    | Product analytics (opt-in for EU; opt-out for JP per §3.5)                    | EU                                 | DPA (EU-resident data; APPI 2022 disclosure for JP-user analytics — §1.4)   |
+| PostHog                    | Product analytics (opt-in for EU/UK; opt-out for non-EU including JP — §3.5)  | EU                                 | DPA (EU-resident data; APPI 2022 disclosure for JP-user analytics — §1.4)   |
 | Upstash                    | Rate limit / cache                                                            | Tokyo region                       | DPA + SCCs (Module 2 for EU/UK transfers; primary is JP)                    |
 | AWS                        | KMS root key only                                                             | `ap-northeast-1` (Tokyo)           | DPA + SCCs (Module 2 for EU/UK; primary is JP)                              |
 
