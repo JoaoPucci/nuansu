@@ -373,9 +373,10 @@ Permissions-Policy: camera=(), microphone=(), geolocation=(), interest-cohort=()
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
 Cross-Origin-Opener-Policy: same-origin
-Cross-Origin-Embedder-Policy: require-corp
 Cross-Origin-Resource-Policy: same-site
 ```
+
+**On `Cross-Origin-Embedder-Policy`.** Deliberately omitted from the global default. `COEP: require-corp` blocks every cross-origin subresource that doesn't opt in via `Cross-Origin-Resource-Policy` or CORS — which would break Stripe (`js.stripe.com`, `hooks.stripe.com` iframes), Cloudflare Turnstile (`challenges.cloudflare.com`), Google / LINE OAuth callback iframes, and Google / LINE-CDN avatar images, none of which we control. The softer `COEP: credentialless` mode would still impose constraints we don't need at v1. COEP exists primarily to enable `SharedArrayBuffer` and a small set of high-precision timers — we use none of those in v1. If a future feature requires SAB (e.g., a WebAssembly-based on-device translation prototype), enable COEP per-route via response middleware on the specific routes that need it, not globally.
 
 ### 13.9 Prompt injection (LLM-specific)
 
