@@ -119,17 +119,55 @@ Two distinct touch-points:
 - **Hard-deletion sequence** — ordered to be transactional-where-possible and to put the irreversible step last so a partial-failure replay can re-attempt every other step idempotently. KMS DEK destruction is the cryptographic point of no return; everything else can run again.
   1. **Flag the user as deleting.** Set `users.deleted_at`. The session-middleware rejects all new authenticated requests for this user with a `410 Gone` immediately.
   2. **Drain in-flight.** Wait ~30 s for any concurrent translate/inbound stream to complete or time out. Avoids racing the deletion against a write that lands after `messages` is purged.
-  3. **Postgres transaction** (single transaction, all-or-nothing). `users`, `auth_users`, and `deletion_requests` rows are intentionally retained at this step (see step 6 / step 7 / step 8 below for why each survives until its turn).
-     - `DELETE FROM messages, message_versions, audit_points, chats, preferences_*, name_locks, pref_suggestions, usage_events, export_jobs, subscriptions WHERE user_id = $1`. Cascades fire automatically.
-     - `UPDATE audit_log SET user_id = NULL, ip = NULL, user_agent = NULL, metadata = '{}' WHERE user_id = $1`. Audit entries are preserved (operational log of past actions) but anonymised.
-     - `DELETE FROM auth_sessions WHERE user_id = $1`.
-     - `DELETE FROM auth_accounts WHERE user_id = $1`.
-     - `DELETE FROM auth_verification_tokens WHERE identifier IN (SELECT email FROM auth_users WHERE id = $1)`. Note that `auth_verification_tokens` does not carry `user_id` (Better Auth's table; see `back_end_architecture.md §3`); the `identifier` column holds the email magic-link tokens were issued to. The subquery executes inside the transaction before any update to `auth_users`, so the email is still resolvable. Tokens not matched here expire by their own 15-minute TTL anyway (`security.md §3.2`), but explicit deletion eliminates the small window where a deletion races with an in-flight magic-link request.
+  3. **Postgres transaction** (single transaction, all-or-nothing). `users`, `auth_users`, and `deletion_requests` rows are intentionally retained at this step — they get anonymised (NULLed PII) in step 6 and the lifecycle record stays for the step-7 completion update. Each DELETE is its own statement; per-table because Postgres does not allow multi-table DELETE in a single statement, and because some tables (`message_versions`, `audit_points`, `preferences_chat`) carry no `user_id` column and rely on CASCADE from their parent. Order respects FK dependencies (children would CASCADE anyway, but we DELETE explicitly for traceable ordering and so retries are predictable):
+
+     ```sql
+     -- Direct user-content tables (cascade to message_versions + audit_points via messages)
+     DELETE FROM messages           WHERE user_id = $1;  -- cascades: message_versions, audit_points
+     DELETE FROM chats              WHERE user_id = $1;  -- cascades: preferences_chat, plus any chat-scoped name_locks/pref_suggestions
+     DELETE FROM name_locks         WHERE user_id = $1;  -- catches global name_locks (chat_id IS NULL)
+     DELETE FROM pref_suggestions   WHERE user_id = $1;  -- defensive: also cascades from chats
+     DELETE FROM preferences_global WHERE user_id = $1;
+     DELETE FROM usage_events       WHERE user_id = $1;
+     DELETE FROM export_jobs        WHERE user_id = $1;
+     DELETE FROM subscriptions      WHERE user_id = $1;
+
+     -- Audit log: anonymised, not deleted (operational record of past actions)
+     UPDATE audit_log SET user_id = NULL, ip = NULL, user_agent = NULL, metadata = '{}' WHERE user_id = $1;
+
+     -- Better Auth tables
+     DELETE FROM auth_sessions       WHERE user_id = $1;
+     DELETE FROM auth_accounts       WHERE user_id = $1;
+     DELETE FROM auth_verification_tokens
+       WHERE identifier IN (SELECT email FROM auth_users WHERE id = $1);
+     -- ↑ auth_verification_tokens has no user_id column (Better Auth's schema; see back_end_architecture.md §3).
+     -- The `identifier` column holds the email magic-link tokens were issued to. The subquery executes
+     -- inside the transaction before any update to auth_users, so the email is still resolvable.
+     -- Tokens not matched here expire by their 15-minute TTL anyway (security.md §3.2), but explicit
+     -- deletion eliminates the small race-window with an in-flight magic-link request.
+     ```
+
   4. **Stripe**: call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent; retried by the hourly `process_deletion_queue` job if 5xx.
   5. **Resend**: add the email address to the suppression list. Idempotent.
-  6. **DEK destruction (LAST — irreversible).** `UPDATE users SET dek_wrapped = NULL WHERE id = $1`. **Do not `DELETE FROM users` here**: `deletion_requests.user_id` is `REFERENCES users(id) ON DELETE CASCADE` (per `back_end_architecture.md §3`), so deleting the user row would cascade-delete the lifecycle record that step 7 needs to update, recreating the same bug step 3's exclusion was designed to avoid. The KMS CMK is shared across the environment and is **never** scheduled for deletion as part of a single-user erasure — it stays alive to unwrap every other user's DEK. The crypto-erasure operation is the destruction of the wrapped DEK ciphertext that lived in `users.dek_wrapped`; once that column is NULLed, the per-user DEK can never be unwrapped from Postgres or any future restore, so the user's encrypted ciphertext is mathematically unreadable.
-  7. `UPDATE deletion_requests SET completed_at = now() WHERE user_id = $1` only after step 6 acks. The hourly `process_deletion_queue` job (per `back_end_architecture.md §7`) retries any incomplete deletion (`completed_at IS NULL AND scheduled_for < now()`).
-  8. **Final lifecycle teardown (separate transaction, after step 7 commits).** `DELETE FROM auth_users WHERE id = $1`. The `users.id REFERENCES auth_users(id) ON DELETE CASCADE` chain cascades the now-tombstoned `users` row, and `deletion_requests.user_id REFERENCES users(id) ON DELETE CASCADE` cascades the lifecycle record itself — both are safe to remove because step 7 already recorded completion and `process_deletion_queue` has stopped tracking it. This is the step that drops the last identifiers (`auth_users.email`, `auth_users.name`, `auth_users.image`, `users.display_name`); doing it as a separate post-completion transaction means a step-8 failure leaves a benign tombstone rather than rolling back the cryptographic erasure of step 6.
+  6. **DEK destruction + final PII anonymisation (LAST — irreversible).** Single transaction:
+
+     ```sql
+     BEGIN;
+     UPDATE users
+       SET dek_wrapped = NULL, display_name = NULL
+       WHERE id = $1;
+     UPDATE auth_users
+       SET email = id || '@deleted.invalid',  -- placeholder satisfies NOT NULL + UNIQUE; .invalid is reserved (RFC 2606)
+           name  = NULL,
+           image = NULL
+       WHERE id = $1;
+     COMMIT;
+     ```
+
+     This is the irreversible crypto-erasure (NULL `dek_wrapped` makes the per-user DEK impossible to unwrap, so all user-encrypted ciphertext is mathematically unreadable from the live DB and from any restored backup as the wrapped DEK ages out per `deployment.md §8`) AND the final PII drop in one atomic step. **Do not `DELETE FROM users` or `DELETE FROM auth_users`**: `deletion_requests.user_id` is `REFERENCES users(id) ON DELETE CASCADE` and `users.id REFERENCES auth_users(id) ON DELETE CASCADE` (per `back_end_architecture.md §3`), so either DELETE would cascade-remove the lifecycle record step 7 needs to update, recreating the bug step 3's exclusion was designed to avoid. The user/auth_users rows stay as anonymised tombstones — no PII remains; the row itself is the durable compliance record of "we deleted this account on date X" for audit. The KMS CMK is shared across the environment and is **never** scheduled for deletion as part of a single-user erasure — it stays alive to unwrap every other user's DEK.
+
+  7. `UPDATE deletion_requests SET completed_at = now() WHERE user_id = $1` only after step 6 commits. The hourly `process_deletion_queue` job (per `back_end_architecture.md §7`) retries any incomplete deletion (`completed_at IS NULL AND scheduled_for < now()`). Step 6 is idempotent — re-running on already-anonymised rows is a no-op (NULL = NULL, placeholder email already set) — so retries between step 6 and step 7 are safe. Once step 7 commits, the deletion is durably complete.
+
 - **Confirmation email** to the user from a generic system address before step 6 (so it's still sendable; after step 6 the user's data including email is gone).
 - **Backups + crypto-erasure.** The wrapped DEK lives in `users.dek_wrapped` (the Postgres `users` table); this row is included in PITR + daily/weekly backups. Privacy policy discloses: deletion is immediately effective on the live database; full crypto-erasure completes when the last backup containing the wrapped DEK ages out — **≤ 35 days post-deletion** (the maximum backup retention per `deployment.md §8`). Until that window closes, an attacker with both backup access AND KMS access could in principle restore. Both are tightly controlled (backup access requires Supabase admin; KMS access requires the dedicated AWS sub-account); separately auditable.
 
