@@ -43,7 +43,7 @@ The data Nuansu handles is intimate by nature: dating-app messages, personal con
 
 ### 3.2 Magic-link discipline
 
-- **Token shape:** 32-byte CSPRNG (256 bits) base64url-encoded. Stored as `sha256(token).hex()` in `auth_verification_tokens.value` (Better Auth's library-managed text column; the magic-link plugin's `generateToken` / `validateToken` overrides — see `back_end_architecture.md §4.1` — hash on issue and on verify, so the raw token never sits in the DB and a DB read can't replay it).
+- **Token shape:** 32-byte CSPRNG (256 bits) base64url-encoded. Stored as `sha256(token).hex()` in `auth_verification_tokens.value` (Better Auth's text-shaped column, populated by the custom magic-link flow at `apps/web/server/auth/magic-link.ts` — see `back_end_architecture.md §4.1`. Better Auth's `magicLink()` plugin is not used because it doesn't expose a public hook for hash-at-rest; the custom flow uses Better Auth's verification table for storage and the Better Auth session-creation primitive on verify but controls issue + verify itself). The raw token never sits in the DB so a DB read can't replay it.
 - **Lifetime:** 15 minutes from issue. Single-use: deleted in the same transaction as verification (so a captured link can't be replayed even within the window).
 - **Rate limits:** ≤5 outstanding tokens per email at any time; ≤5 sends/hour/email AND ≤20 sends/hour/source-IP; verify-attempts ≤10/hour/IP. Rate-limit state lives in Redis with an atomic Lua script per check.
 - **Lookup:** constant-time comparison via the `timingSafeEqualBytes` wrapper from §13.6 (length-safe `node:crypto` `timingSafeEqual`) against the stored hash.
