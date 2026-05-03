@@ -115,25 +115,53 @@ CREATE TABLE auth_sessions (
 );
 
 CREATE TABLE auth_accounts (
-  id                  text PRIMARY KEY,
-  user_id             text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
-  provider_id         text NOT NULL,                     -- 'email', 'google', 'apple', 'line'
-  account_id          text NOT NULL,                     -- provider's user id
-  access_token        bytea,                             -- field-level encrypted (envelope, AAD §4.2)
-  access_token_nonce  bytea,
-  refresh_token       bytea,                             -- field-level encrypted
-  refresh_token_nonce bytea,
-  id_token            bytea,                             -- field-level encrypted
-  id_token_nonce      bytea,
-  expires_at          timestamptz,
-  created_at          timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (provider_id, account_id)
+  id                      text PRIMARY KEY,
+  user_id                 text NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  provider_id             text NOT NULL,                 -- 'email', 'google', 'apple', 'line'
+  account_id              text NOT NULL,                 -- provider's user id
+  -- Better Auth-library-managed columns. Kept as `text` per the library's
+  -- account-adapter contract (Better Auth writes plaintext here on OAuth
+  -- callback). The columns below are NULLed by the
+  -- `databaseHooks.account.create.after` and `account.update.after` hooks
+  -- inside the same transaction as the Better Auth write, so plaintext
+  -- never durably persists. See §4.1 (Auth) for the hook implementation.
+  access_token            text,
+  refresh_token           text,
+  id_token                text,
+  -- Our additions: envelope-encrypted ciphertext + per-field nonces
+  -- (XChaCha20-Poly1305; AAD per security.md §4.2). Populated by the
+  -- after-write hook from the just-written plaintext columns above, in the
+  -- same transaction as the NULLing of those columns.
+  access_token_enc        bytea,
+  access_token_enc_nonce  bytea,
+  refresh_token_enc       bytea,
+  refresh_token_enc_nonce bytea,
+  id_token_enc            bytea,
+  id_token_enc_nonce      bytea,
+  expires_at              timestamptz,
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (provider_id, account_id),
+  -- Invariant: if the encrypted column is non-NULL, the plaintext column
+  -- must be NULL. The plaintext columns are only transiently populated
+  -- inside the Better Auth write transaction, before the after-hook fires.
+  -- A fitness test (docs/quality.md §3.1) asserts no committed row violates
+  -- this CHECK against a populated test DB.
+  CHECK (access_token IS NULL OR access_token_enc IS NULL),
+  CHECK (refresh_token IS NULL OR refresh_token_enc IS NULL),
+  CHECK (id_token IS NULL OR id_token_enc IS NULL)
 );
 
 CREATE TABLE auth_verification_tokens (
   id          text PRIMARY KEY,
   identifier  text NOT NULL,                              -- email for magic links
-  value_hash  bytea NOT NULL,                             -- SHA-256(token); raw token never stored. Token is 32-byte CSPRNG (256 bits) base64url-encoded; constant-time lookup; single-use (deleted on first verify); see security.md §3
+  -- Better Auth-library-managed column. Kept as `text NOT NULL` per the
+  -- library's verification-adapter contract. Stored content is the
+  -- HEX-encoded SHA-256 hash of the raw token, NOT the raw token itself —
+  -- the magic-link plugin's `generateToken`/`validateToken` overrides
+  -- (configured in §4.1) hash on issue and on verify, so Better Auth
+  -- never sees or persists the plaintext token. The 64-char hex hash
+  -- fits the existing text column, no schema rename needed.
+  value       text NOT NULL,                              -- sha256(token).hex(); 64 hex chars; see security.md §3.2 for token shape + lookup discipline
   expires_at  timestamptz NOT NULL,                       -- created_at + 15 minutes (security.md §3)
   created_at  timestamptz NOT NULL DEFAULT now()
 );
@@ -368,7 +396,8 @@ Notes:
 - **Application IDs (chats, messages, etc.) are UUIDv7** generated app-side (`uuid` column type, time-ordered, sortable). Use a small library (`uuidv7` npm) — avoids the Postgres-extension dependency and keeps generation portable.
 - **All `user_id` columns are `text`** to match `users.id` and `auth_users.id` (Better Auth issues string IDs, UUID-shaped but stored as `text`). A migration-time fitness test (`docs/quality.md §3.1`) introspects `pg_attribute` and asserts every `user_id` column has type `text` — a mismatch silently breaks foreign-key enforcement and RLS.
 - **`bytea` columns store envelope-encrypted ciphertext** (see `security.md §4.2`). Every encrypted column has a paired `*_nonce bytea` column carrying the per-encryption 24-byte XChaCha20 nonce. AAD = `(user_id ‖ table_name ‖ column_name ‖ row_id)` — column-name inclusion blocks intra-row swap (e.g., `final_source_text` ↔ `final_target_text` cannot be exchanged within the same row). A fitness test asserts every `bytea` user-content column has a matching `*_nonce` sibling.
-- **Encrypted-fields catalogue.** User-authored or counterparty content is always encrypted: `messages.{final_target_text, final_source_text, gloss, prefs_snapshot}`, `message_versions.{source_text, target_text}`, `pref_suggestions.{from_value, to_value, evidence_excerpt}`, `name_locks.{source_form, target_form, notes}`, `preferences_chat.{my_nickname, contact_name_src, contact_name_tgt, notes}`, `auth_accounts.{access_token, refresh_token, id_token}` (OAuth tokens). Email and identifiers stay plaintext for indexability — `security.md §4.5` explains why and what protects them.
+- **Encrypted-fields catalogue.** User-authored or counterparty content is always encrypted: `messages.{final_target_text, final_source_text, gloss, prefs_snapshot}`, `message_versions.{source_text, target_text}`, `pref_suggestions.{from_value, to_value, evidence_excerpt}`, `name_locks.{source_form, target_form, notes}`, `preferences_chat.{my_nickname, contact_name_src, contact_name_tgt, notes}`, `auth_accounts.{access_token_enc, refresh_token_enc, id_token_enc}` (OAuth tokens; the paired plaintext `access_token`/`refresh_token`/`id_token` text columns are Better Auth library-managed and NULLed by an after-write hook in the same transaction — see §4.1 and the CHECK constraints on the table). Email and identifiers stay plaintext for indexability — `security.md §4.5` explains why and what protects them.
+- **Magic-link tokens (`auth_verification_tokens.value`)** are stored as `sha256(token).hex()` — Better Auth's text column kept as text per its library contract, but the magic-link plugin's `generateToken`/`validateToken` overrides hash on issue and on verify so the raw token is never persisted. See `security.md §3.2` for the full token-shape + lookup discipline; see §4.1 for the override config.
 - **Deterministic dedup keys for encrypted content the server queries by equality.** Random per-write nonces defeat direct ciphertext equality checks, so any row the server later looks up by equality of an encrypted field needs a paired deterministic key. Currently this applies to `pref_suggestions.to_value_dedup_key` (used by the §5.4 anti-spam rule that drops re-emitted dismissed suggestions). Construction: `HMAC-SHA256(per_user_dedup_key, normalize(plaintext))`, truncated to 16 bytes. `per_user_dedup_key` is HKDF-derived from the user's DEK with `info = "pref_suggestions/to_value/dedup"` so it (a) crypto-erases with the DEK on account deletion and (b) is per-user (so one user's `to_value` of "Mariko" doesn't collide-with or reveal another user's same plaintext). `normalize` is NFC + lowercase + collapse whitespace. Adding a new "lookup encrypted field by equality" pattern requires the same dedup-key shape; a fitness test (`docs/quality.md §3.1`) catches encrypted fields used in WHERE clauses without a paired dedup-key column.
 - **Soft deletes (`deleted_at`) on user-visible content;** hard purge via background job per `compliance.md §3.3`. Account deletion sequences crypto-erasure (DEK destruction) LAST so a partial-failure replay can re-attempt every other step idempotently.
 
@@ -534,7 +563,46 @@ export const auth = betterAuth({
   ],
   session: { cookieCache: { enabled: true, maxAge: 60 * 5 } }, // 5min cookie cache
   trustedOrigins: [env.APP_URL],
+
+  // OAuth-token encryption hook. Better Auth writes the OAuth tokens to
+  // `auth_accounts.{access_token, refresh_token, id_token}` as plaintext
+  // (its library contract — those columns are kept as `text` per §3.1).
+  // This after-write hook fires inside the same transaction as Better
+  // Auth's INSERT/UPDATE; it encrypts each non-null token via the
+  // envelope wrapper and overwrites the plaintext columns with NULL
+  // before commit. Net effect: plaintext lives for the duration of one
+  // transaction; only ciphertext is durable. The CHECK constraints on
+  // the table enforce the resulting invariant. See security.md §4.2.
+  databaseHooks: {
+    account: {
+      create: { after: encryptOAuthTokensInPlace },
+      update: { after: encryptOAuthTokensInPlace },
+    },
+  },
 });
+
+// Magic-link plugin (separate from auth above for readability) overrides
+// `generateToken` and `validateToken` so that:
+//   - generate: returns the raw 32-byte CSPRNG token to email; persists
+//     `sha256(token).hex()` to `auth_verification_tokens.value`.
+//   - validate: hashes the submitted token, compares to the stored hash
+//     via `timingSafeEqualBytes` (security.md §13.6).
+// The raw token never sits in the DB. See security.md §3.2.
+//
+// Concrete shape (illustrative):
+//
+//   magicLink({
+//     generateToken: () => {
+//       const raw = randomTokenBase64Url(32);
+//       return { rawToken: raw, persistedValue: sha256Hex(raw) };
+//     },
+//     validateToken: async ({ submittedToken, persistedValue }) => {
+//       return timingSafeEqualBytes(
+//         sha256Bytes(submittedToken),
+//         hexToBytes(persistedValue),
+//       );
+//     },
+//   })
 ```
 
 ### 4.2 Hono mount

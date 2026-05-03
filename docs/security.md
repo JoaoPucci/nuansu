@@ -43,7 +43,7 @@ The data Nuansu handles is intimate by nature: dating-app messages, personal con
 
 ### 3.2 Magic-link discipline
 
-- **Token shape:** 32-byte CSPRNG (256 bits) base64url-encoded. Stored as `sha256(token)` in `auth_verification_tokens.value_hash` — the raw token never sits in the DB, so a DB read can't replay it.
+- **Token shape:** 32-byte CSPRNG (256 bits) base64url-encoded. Stored as `sha256(token).hex()` in `auth_verification_tokens.value` (Better Auth's library-managed text column; the magic-link plugin's `generateToken` / `validateToken` overrides — see `back_end_architecture.md §4.1` — hash on issue and on verify, so the raw token never sits in the DB and a DB read can't replay it).
 - **Lifetime:** 15 minutes from issue. Single-use: deleted in the same transaction as verification (so a captured link can't be replayed even within the window).
 - **Rate limits:** ≤5 outstanding tokens per email at any time; ≤5 sends/hour/email AND ≤20 sends/hour/source-IP; verify-attempts ≤10/hour/IP. Rate-limit state lives in Redis with an atomic Lua script per check.
 - **Lookup:** constant-time comparison via the `timingSafeEqualBytes` wrapper from §13.6 (length-safe `node:crypto` `timingSafeEqual`) against the stored hash.
@@ -143,7 +143,7 @@ async function encryptForUser(
 - **Drift detection evidence:** `pref_suggestions.{from_value, to_value, evidence_excerpt}` — `from_value` and `to_value` carry name strings; `evidence_excerpt` carries the user-visible quote. `reasoning` (a generic short string like "She introduced a different name") is metadata, not encrypted.
 - **Per-chat preferences (carry user-typed personal data):** `preferences_chat.{my_nickname, contact_name_src, contact_name_tgt, notes}`.
 - **Name locks:** `name_locks.{source_form, target_form, notes}`.
-- **OAuth provider tokens:** `auth_accounts.{access_token, refresh_token, id_token}` — without this, a DB-read leak yields persistent impersonation on Google/Apple/LINE for every linked account.
+- **OAuth provider tokens:** `auth_accounts.{access_token_enc, refresh_token_enc, id_token_enc}` (with paired `*_nonce` columns) — without this, a DB-read leak yields persistent impersonation on Google/Apple/LINE for every linked account. Better Auth's library-managed plaintext `access_token` / `refresh_token` / `id_token` text columns are NULLed by the `databaseHooks.account.create.after` / `update.after` hook in the same transaction as Better Auth's write — see `back_end_architecture.md §4.1`. CHECK constraints on the table enforce that the encrypted column being non-NULL implies the plaintext column is NULL.
 
 **Plaintext columns by design** (and what protects them — see §4.5 for the email-specific reasoning): identifiers (`auth_users.email`, all `id` columns); routing metadata (`users.{display_name, source_language, locale, region}`, `chats.{name, target_language}`); operational metrics (`usage_events.*`, `subscriptions.*`); chat-level non-content metadata (`messages.{register_chosen, register_detected, dialect_flags, model, prompt_version}`, `pref_suggestions.{confidence, category, reasoning, status}`).
 
