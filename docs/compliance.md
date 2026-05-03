@@ -121,6 +121,15 @@ Two distinct touch-points:
   2. **Drain in-flight.** Wait ~30 s for any concurrent translate/inbound stream to complete or time out. Avoids racing the deletion against a write that lands after `messages` is purged.
   3. **Postgres transaction** (single transaction, all-or-nothing). `users`, `auth_users`, and `deletion_requests` rows are intentionally retained at this step — they get anonymised (NULLed PII) in step 6 and the lifecycle record stays for the step-7 completion update. Each DELETE is its own statement; per-table because Postgres does not allow multi-table DELETE in a single statement, and because some tables (`message_versions`, `audit_points`, `preferences_chat`) carry no `user_id` column and rely on CASCADE from their parent. Order respects FK dependencies (children would CASCADE anyway, but we DELETE explicitly for traceable ordering and so retries are predictable):
 
+     **Storage objects first, then DB rows.** `export_jobs` rows reference archive objects in Supabase Storage (per §3.1's app-local proxy delivery) and `chats` / `messages` may reference uploaded attachments (post-v1, but the ordering already needs to be right). Capture every storage path BEFORE the DB DELETEs run, then issue the storage `delete` calls; only THEN drop the DB rows. Otherwise the DB references are gone but the objects orphan in storage with no remaining lookup. Concretely:
+
+     ```sql
+     -- Capture storage paths before DELETEs; the application reads these
+     -- into a list and issues `supabase.storage.delete(path)` for each
+     -- before continuing. Idempotent: a missing object is a no-op.
+     SELECT storage_path FROM export_jobs WHERE user_id = $1;
+     ```
+
      ```sql
      -- Direct user-content tables (cascade to message_versions + audit_points via messages)
      DELETE FROM messages           WHERE user_id = $1;  -- cascades: message_versions, audit_points
@@ -129,13 +138,14 @@ Two distinct touch-points:
      DELETE FROM pref_suggestions   WHERE user_id = $1;  -- defensive: also cascades from chats
      DELETE FROM preferences_global WHERE user_id = $1;
      DELETE FROM usage_events       WHERE user_id = $1;
-     DELETE FROM export_jobs        WHERE user_id = $1;
-     -- subscriptions row is INTENTIONALLY KEPT here — step 4 needs to read
-     -- subscriptions.stripe_customer_id to call Stripe customer.delete /
-     -- update. Deleting it now would leave step 4 with no way to look up
-     -- the Stripe customer on retry, leaving third-party billing data
-     -- undeleted. The subscriptions row is deleted at the end of step 4
-     -- once Stripe has acked. (back_end_architecture.md §3 schema.)
+     DELETE FROM export_jobs        WHERE user_id = $1;  -- only AFTER storage objects above are purged
+     -- subscriptions row is INTENTIONALLY KEPT here AND through step 4 —
+     -- step 4 needs to read subscriptions.stripe_customer_id to call Stripe
+     -- customer.delete / update, AND the row must survive across step-4
+     -- retries until step 7 commits. Deleting earlier would leave a 5xx-
+     -- retried Stripe call with no way to look up the customer. The
+     -- subscriptions row is dropped in step 7 alongside the completion
+     -- marker. (back_end_architecture.md §3 schema.)
 
      -- Audit log: anonymised, not deleted (operational record of past actions)
      UPDATE audit_log SET user_id = NULL, ip = NULL, user_agent = NULL, metadata = '{}' WHERE user_id = $1;
@@ -152,7 +162,7 @@ Two distinct touch-points:
      -- deletion eliminates the small race-window with an in-flight magic-link request.
      ```
 
-  4. **Stripe**: read `stripe_customer_id` from the still-present `subscriptions` row, call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent; retried by the hourly `process_deletion_queue` job if 5xx (the subscriptions row stays intact across retries because the Stripe ack hasn't fired yet). Once Stripe acks success: `DELETE FROM subscriptions WHERE user_id = $1` in the same transaction as the ack record. After this point, no further retry of step 4 is needed and the row is no longer queryable.
+  4. **Stripe**: read `stripe_customer_id` from the still-present `subscriptions` row, call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent via Stripe's `Idempotency-Key` header (set to `del-<user_id>` so retries collapse to one Stripe-side operation). The `subscriptions` row stays intact across step 4 AND beyond — it's not deleted here, because if step 5, 6, or 7 fails after step 4 commits, the hourly retry needs to re-enter the flow with `stripe_customer_id` still queryable to confirm Stripe-side state. The DELETE moves to step 7 (atomically with the completion marker).
   5. **Resend**: add the email address to the suppression list. Idempotent.
   6. **DEK destruction + final PII anonymisation (LAST — irreversible).** Single transaction:
 
@@ -171,7 +181,16 @@ Two distinct touch-points:
 
      This is the irreversible crypto-erasure (NULL `dek_wrapped` makes the per-user DEK impossible to unwrap, so all user-encrypted ciphertext is mathematically unreadable from the live DB and from any restored backup as the wrapped DEK ages out per `deployment.md §8`) AND the final PII drop in one atomic step. **Do not `DELETE FROM users` or `DELETE FROM auth_users`**: `deletion_requests.user_id` is `REFERENCES users(id) ON DELETE CASCADE` and `users.id REFERENCES auth_users(id) ON DELETE CASCADE` (per `back_end_architecture.md §3`), so either DELETE would cascade-remove the lifecycle record step 7 needs to update, recreating the bug step 3's exclusion was designed to avoid. The user/auth_users rows stay as anonymised tombstones — no PII remains; the row itself is the durable compliance record of "we deleted this account on date X" for audit. The KMS CMK is shared across the environment and is **never** scheduled for deletion as part of a single-user erasure — it stays alive to unwrap every other user's DEK.
 
-  7. `UPDATE deletion_requests SET completed_at = now() WHERE user_id = $1` only after step 6 commits. The hourly `process_deletion_queue` job (per `back_end_architecture.md §7`) retries any incomplete deletion (`completed_at IS NULL AND scheduled_for < now()`). Step 6 is idempotent — re-running on already-anonymised rows is a no-op (NULL = NULL, placeholder email already set) — so retries between step 6 and step 7 are safe. Once step 7 commits, the deletion is durably complete.
+  7. **Mark complete + drop subscriptions row** (single transaction, only after step 6 commits):
+
+     ```sql
+     BEGIN;
+     DELETE FROM subscriptions     WHERE user_id = $1;
+     UPDATE deletion_requests SET completed_at = now() WHERE user_id = $1;
+     COMMIT;
+     ```
+
+     The hourly `process_deletion_queue` job (per `back_end_architecture.md §7`) retries any incomplete deletion (`completed_at IS NULL AND scheduled_for < now()`). Steps 4 + 6 are idempotent (Stripe call uses `Idempotency-Key`; the in-place anonymisation NULLs that are already NULL), so retries from anywhere upstream of step 7 are safe — they re-run the chain and converge. The single transaction here is the durable "deletion complete" commit; if it fails, `subscriptions` stays alive and the next retry can still read `stripe_customer_id` to re-confirm Stripe-side state before re-attempting the commit.
 
 - **Confirmation email** to the user from a generic system address before step 6 (so it's still sendable; after step 6 the user's data including email is gone).
 - **Backups + crypto-erasure.** The wrapped DEK lives in `users.dek_wrapped` (the Postgres `users` table); this row is included in PITR + daily/weekly backups. Privacy policy discloses: deletion is immediately effective on the live database; full crypto-erasure completes when the last backup containing the wrapped DEK ages out — **≤ 35 days post-deletion** (the maximum backup retention per `deployment.md §8`). Until that window closes, an attacker with both backup access AND KMS access could in principle restore. Both are tightly controlled (backup access requires Supabase admin; KMS access requires the dedicated AWS sub-account); separately auditable.
