@@ -194,7 +194,36 @@ CREATE TABLE users (
   deleted_at               timestamptz
 );
 
--- A trigger creates a row in `users` whenever a row is created in `auth_users`.
+-- A trigger creates a row in `users` whenever a row is created in
+-- `auth_users`. The trigger function is declared SECURITY DEFINER and
+-- owned by `nuansu_migrate` — Better Auth signup runs as `nuansu_auth`
+-- (see §3.3), which has no INSERT privilege on `users`. Default trigger
+-- security (SECURITY INVOKER) would run the trigger body as
+-- `nuansu_auth` and abort the signup with "permission denied for table
+-- users". SECURITY DEFINER runs the trigger body as the owner
+-- (`nuansu_migrate`), which can write both tables. Concretely:
+--
+--   CREATE OR REPLACE FUNCTION nuansu_auth_user_to_app_user()
+--     RETURNS trigger
+--     LANGUAGE plpgsql
+--     SECURITY DEFINER
+--     SET search_path = public, pg_temp
+--   AS $$
+--   BEGIN
+--     INSERT INTO public.users (id) VALUES (NEW.id);
+--     RETURN NEW;
+--   END;
+--   $$;
+--   ALTER FUNCTION nuansu_auth_user_to_app_user() OWNER TO nuansu_migrate;
+--   REVOKE ALL ON FUNCTION nuansu_auth_user_to_app_user() FROM PUBLIC;
+--   GRANT EXECUTE ON FUNCTION nuansu_auth_user_to_app_user() TO nuansu_auth;
+--   CREATE TRIGGER auth_user_to_app_user
+--     AFTER INSERT ON auth_users
+--     FOR EACH ROW EXECUTE FUNCTION nuansu_auth_user_to_app_user();
+--
+-- The `SET search_path = public, pg_temp` is the standard SECURITY
+-- DEFINER hardening per `security.md §13.2` — prevents a search-path
+-- attack from redirecting `users` to a different schema.
 
 CREATE TABLE preferences_global (
   user_id              text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -619,20 +648,36 @@ export const auth = betterAuth({
 //   - Issue: generate a 32-byte CSPRNG token; INSERT
 //     (id=uuidv7, identifier=email, value=sha256(token).hex(),
 //      expires_at=now()+15min). Email the raw token URL via Resend.
-//   - Verify: compute h = sha256(submittedToken).hex(); SELECT the
-//     row WHERE identifier=email AND value=h AND expires_at > now()
-//     AND created_at = (SELECT max(created_at) FROM auth_verification_tokens
-//       WHERE identifier=email AND value=h AND expires_at > now()).
-//     The match is identifier+hash equality, not identifier alone —
-//     `security.md §3.2` allows up to 5 outstanding tokens per email
-//     for rate-limit headroom, so any "lookup the row by identifier"
-//     would return a non-deterministic neighbour and reject valid
-//     tokens. After the SELECT, do the constant-time compare on the
-//     value column (`timingSafeEqualBytes`, security.md §13.6) as
-//     defense-in-depth even though the WHERE already narrowed by hash.
-//     On match: DELETE only the matched row (single-use); then call
-//     auth.api.signInEmail (or equivalent) to establish the Better
-//     Auth session.
+//   - Verify: compute h = sha256(submittedToken).hex(); atomically
+//     consume the matching row in one statement:
+//
+//       DELETE FROM auth_verification_tokens
+//       WHERE identifier = $email
+//         AND value      = $h
+//         AND expires_at > now()
+//       RETURNING id;
+//
+//     If RETURNING is empty: the token was already consumed by a
+//     concurrent verify, never existed, or has expired — reject. If
+//     RETURNING is non-empty: this request is the unique consumer of
+//     that token (DELETE ... RETURNING is atomic; two concurrent
+//     verifiers cannot both win), so call auth.api.signInEmail (or
+//     equivalent) to establish the Better Auth session.
+//
+//     Two reasons the predicate is (identifier, value, expires_at)
+//     and not (identifier) alone: (1) `security.md §3.2` allows up to
+//     5 outstanding tokens per email for rate-limit headroom, so a
+//     SELECT/DELETE by identifier alone returns one row non-
+//     deterministically and rejects valid tokens whose row sorts
+//     second. (2) DELETE + RETURNING in one statement closes the
+//     SELECT-then-DELETE TOCTOU race that would otherwise let two
+//     concurrent verifies of the same magic link both succeed,
+//     defeating the single-use guarantee. The constant-time compare
+//     on `value` (timingSafeEqualBytes, security.md §13.6) is no
+//     longer needed because the WHERE already used hash equality and
+//     the timing of an indexed equality lookup doesn't leak the hash;
+//     however, keep it as defense-in-depth on the matched row's value
+//     before establishing the session.
 //
 // This bypasses the magicLink() plugin but uses Better Auth's table
 // and session-creation primitives. The raw token never sits in the DB.
