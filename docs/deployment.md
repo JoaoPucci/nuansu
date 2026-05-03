@@ -73,11 +73,16 @@ APP_ENV=production            # local | preview | production
 DEFAULT_LOCALE=en             # en | ja
 
 # Supabase (Postgres + Storage only — no Auth)
+# Three Postgres roles per back_end_architecture.md §3.3 (defence-in-depth):
+#   nuansu_app      — application code (Hono routes via db.forUser); no access to auth_* tables, no BYPASSRLS
+#   nuansu_auth     — Better Auth library (server/auth.ts only); no access to application tables
+#   nuansu_migrate  — DDL only, used from CI; owns the schema
 SUPABASE_URL=https://<your-project-ref>.supabase.co
 SUPABASE_PROJECT_REF=<your-project-ref>
 SUPABASE_SERVICE_ROLE_KEY=<jwt>          # for storage signed-URLs from the server
-DATABASE_URL=postgres://...?sslmode=verify-full   # pooled, app-runtime
-DIRECT_DATABASE_URL=postgres://...                 # non-pooled, migrations only
+DATABASE_URL=postgres://nuansu_app:...?sslmode=verify-full         # pooled, app-runtime (role: nuansu_app)
+AUTH_DATABASE_URL=postgres://nuansu_auth:...?sslmode=verify-full   # pooled, used only by server/auth.ts (role: nuansu_auth)
+DIRECT_DATABASE_URL=postgres://nuansu_migrate:...                  # non-pooled, migrations only, CI-only (role: nuansu_migrate)
 
 # Better Auth (runs in our Worker)
 BETTER_AUTH_SECRET=<32-byte-hex>         # signs sessions
