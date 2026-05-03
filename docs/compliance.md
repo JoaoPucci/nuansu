@@ -100,7 +100,7 @@ Two distinct touch-points:
 - **Schema versioning.** The export shape is defined in `packages/export/schema.ts` with versioned interfaces. `format_version` follows semver: minor bumps add fields (consumers should ignore unknowns); major bumps change shape (consumers must update to consume). Old format versions remain documented for at least 12 months so external consumers (e.g., a self-hosted Obsidian importer) have time to adapt.
 - **Delivery.** The user receives an email containing a signed app-local URL of the form `/exports/<job_id>?token=<signed>`. The URL is **not** a direct storage URL — direct storage URLs are bearer credentials that survive any inbox compromise (phishing, SIM swap, residual access in a recycled email). The app-local URL requires a re-authenticated session (within the last 10 min) and proxies the storage object via a one-time-use server-side fetch. URL expires after the first download or 24 hours, whichever comes first; bound to the requesting user-agent + IP family. Outbound `Referrer-Policy: no-referrer` header strips the URL from any subsequent navigation.
 - Request rate-limited to 1 per 24 hours per account.
-- DSAR contact addresses: `privacy@nuansu.app` (English, primary) and `privacy-jp@nuansu.app` (Japanese, with JP-language acknowledgement template). JP users receive auto-acknowledgement in JP within 24h; full response within the regulatory window for their jurisdiction. Inbound mailbox provisioning documented in `deployment.md §5.6`.
+- DSAR contact addresses: `privacy@nuansu.app` (English, primary) and `privacy-jp@nuansu.app` (Japanese, with JP-language acknowledgement template). JP users receive auto-acknowledgement in JP within 24h; full response within the regulatory window for their jurisdiction. Inbound mailbox provisioning is the responsibility of the email-routing setup (MX records on `nuansu.app` route the four addresses to a shared inbox; auto-acknowledgement uses Resend's transactional API with the JP template at `packages/i18n/ja/dsar-ack.json`). Provisioning is verified pre-launch per `compliance.md §11` ("Inbound mailbox provisioning verified") rather than living in a deployment-doc subsection — it's a one-time DNS + email-rule setup, not part of the recurring deploy flow.
 
 ### 3.2 Right of rectification
 
@@ -353,7 +353,7 @@ Nuansu is a translation copilot — we facilitate communication, we don't genera
 - **Outputs are bound by Anthropic's content policy** (the LLM provider's safety filtering applies to all translations).
 - **No proactive moderation** of user-typed source content; Nuansu doesn't read messages for policy compliance.
 - **Third-party platform reports.** If a platform (LINE, Tinder, Meta, etc.) traces a user complaint back to a translation produced by Nuansu and asks for our cooperation: we require a JP-court order or MLAT request for content disclosure. We can produce ciphertext + envelope-encryption metadata; without the user's DEK (which is destroyed on account deletion), the ciphertext is mathematically unreadable by us.
-- **Law enforcement requests** — formal legal process required. We publish an annual transparency report (post-launch) summarising the volume + jurisdictions of requests received and outcomes (`compliance.md §13` once the first report ships).
+- **Law enforcement requests** — formal legal process required. We publish an annual transparency report (post-launch) summarising the volume + jurisdictions of requests received and outcomes; the first report's content + cadence are out of scope for v1 and will be added to this doc as a new section when the first report ships.
 - `[COUNSEL]` for the formal language; this section is the founder-level position, not the legally-reviewed text.
 
 ## 11. Pre-launch compliance checklist
@@ -364,7 +364,7 @@ Nuansu is a translation copilot — we facilitate communication, we don't genera
 - [ ] DPIA filled in by founder (controller block, JP address, draft date) and signed off by EU + JP counsel — placeholders resolved.
 - [ ] Anthropic ZDR contract countersigned + PDF archived. **No production traffic until done.** Until then: privacy policy must disclose 30-day retention OR all paid-LLM calls hit a ZDR-confirmed account.
 - [ ] Sub-processor list published at `/sub-processors` (EN + JP) — generated from the single source `packages/legal/sub-processors.ts`.
-- [ ] Sub-processor 30-day notice mechanism live (Resend list + opt-in form on `/sub-processors`).
+- [ ] Sub-processor 30-day notice mechanism live per §8: (a) **canonical transactional email** to every active account on every sub-processor change (not opt-out-able under GDPR Art. 13/14), (b) public changelog at `/sub-processors` with the effective date 30 days out, (c) opt-in `sub-processor-changes@nuansu.app` Resend list + opt-in form on `/sub-processors` as the supplementary channel for users who want richer ahead-of-time notice. Pre-launch dry-run: send a no-op "test notice" to a single dogfood account through every channel and verify delivery.
 - [ ] DPAs with all sub-processors (Anthropic, Cloudflare, Supabase, Google, Apple, LINE, Stripe, Resend, Sentry, PostHog, Upstash, AWS).
 - [ ] Executed SCCs + TIAs archived per US sub-processor at `private/legal/transfers/`. UK addendum executed for any UK-user-touching vendor.
 - [ ] Cookie banner active in required regions; consent state machine wired with PostHog init gated on consent. **Sentry initialises unconditionally** — error monitoring is operational telemetry needed for incident detection (§6.2 runbook depends on it), not analytics. Sentry's PII redactor (server-side `beforeSend` strips emails / message bodies / OAuth tokens; client-side scrubs the same fields from breadcrumbs + errors) is the consent-equivalent: nothing personally identifying ever reaches Sentry, so no consent gate is required even under GDPR.
@@ -375,7 +375,7 @@ Nuansu is a translation copilot — we facilitate communication, we don't genera
 - [ ] Breach response runbook on file (covers GDPR 72h, LGPD 2-day, APPI PPC "without delay" reporting).
 - [ ] Lead EU supervisory authority identified.
 - [ ] Records of processing activities (ROPA) established.
-- [ ] Contact addresses live: `privacy@` (English), `privacy-jp@` (Japanese), `support@`, `support-jp@`. **Inbound mailbox provisioning verified** (MX records, forwarding rules, JP auto-acknowledgement template at `packages/i18n/ja/dsar-ack.json`) per `deployment.md §5.6`.
+- [ ] Contact addresses live: `privacy@` (English), `privacy-jp@` (Japanese), `support@`, `support-jp@`. **Inbound mailbox provisioning verified**: MX records on `nuansu.app` route the four addresses to a shared inbox; auto-acknowledgement uses Resend's transactional API with the JP template at `packages/i18n/ja/dsar-ack.json`. Test by sending one message to each address from an external account; confirm receipt + auto-ack delivery within 60s.
 - [ ] Marketing copy audit against §4 — **both EN and JP locales**.
 - [ ] EU representative (Prighter or equivalent) under contract once first EU sign-up arrives.
 - [ ] AGPL `/source` page live, linking to GitHub repo + deployed commit SHA.
