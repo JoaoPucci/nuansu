@@ -175,18 +175,24 @@ Two distinct touch-points:
      The `subscriptions` row stays intact across step 4 AND beyond — it's not deleted here, because if step 5, 6, or 7 fails after step 4 commits, the hourly retry needs to re-enter the flow with `stripe_customer_id` still queryable. The DELETE moves to step 7 (atomically with the completion marker).
 
   5. **Resend**: in this exact order —
-     - **(a) Send the deletion-confirmation email**, gated on a per-request dedupe marker so cross-tick retries don't re-send. Logic:
+     - **(a) Send the deletion-confirmation email**, gated by a **claim-then-send** dedupe pattern so cross-tick retries don't double-fire. Resend is an external HTTP call that cannot be rolled back inside a Postgres transaction, so the marker must be written **before** the send and the send must be idempotent at Resend's side. Logic:
 
        ```sql
-       SELECT confirmation_sent_at FROM deletion_requests WHERE user_id = $1;
-       -- If NULL, send the email via Resend, then in the SAME transaction:
-       UPDATE deletion_requests SET confirmation_sent_at = now() WHERE user_id = $1;
-       -- If already non-NULL, skip — a prior step-5 attempt sent the email
-       -- and a downstream step (6 or 7) failed; resending would give the
-       -- user duplicate "account deleted" emails.
+       -- Atomic claim: the UPDATE returns a row only on the FIRST tick to
+       -- claim this request. If a concurrent or retrying tick already
+       -- claimed it, this returns no row and we skip the send entirely.
+       UPDATE deletion_requests
+          SET confirmation_sent_at = now()
+        WHERE user_id = $1 AND confirmation_sent_at IS NULL
+       RETURNING true;
+       -- If RETURNING returned a row → we own the claim → call
+       -- Resend with Idempotency-Key: del-conf-<user_id> (covers the
+       -- transient-network re-send window inside one tick).
+       -- If RETURNING returned no row → another worker / a prior tick
+       -- already sent → skip.
        ```
 
-       The `confirmation_sent_at` column lives on `deletion_requests` (see `back_end_architecture.md §3`). Resend's `Idempotency-Key` header alone isn't enough here because it only persists ~24h and the queue retry window is unbounded.
+       The `confirmation_sent_at` column lives on `deletion_requests` (added in `back_end_architecture.md §3` on PR #32 — this is the cross-PR dependency note; PR #34 cannot be merged before that column lands or step 5(a) errors with "column does not exist"). The Postgres marker is the at-most-once gate; Resend's `Idempotency-Key` (24h cache) is the at-least-once retry inside one tick. **Trade-off (intentional v1)**: if Resend is down at the moment we own the claim, the email is lost and the user gets no confirmation — the marker is set so we don't try again. Sentry alerts on Resend non-2xx so on-call can re-send out-of-band. A full outbox pattern (DB-row + background worker + ack-on-success) is roadmap for v2.
 
      - **(b) Add the email address to the Resend suppression list.** Idempotent on Resend's side — adding an already-suppressed address is a no-op.
 
