@@ -11,12 +11,12 @@
 // change.
 
 import { bench, describe } from "vitest";
-import { aadFromRowId, decryptForUser, encryptForUser } from "./envelope.js";
+import { aadForField, decryptForUser, encryptForUser } from "./envelope.js";
 import { createStubDekProvider } from "./kms-stub.js";
 
 const USER = "usr_bench";
 const ROW = "018f7c9a-3b4c-7d8e-9a0b-1c2d3e4f5061";
-const AAD = aadFromRowId(ROW);
+const AAD = aadForField(USER, "messages", "final_target_text", ROW);
 const SEED = "bench-seed-do-not-use-in-prod";
 const SHORT_PLAINTEXT = "hello";
 const TYPICAL_PLAINTEXT = "ちょっと遅れます。Shibuyaの駅で待ち合わせ場所を変えませんか?";
