@@ -124,10 +124,14 @@ Two distinct touch-points:
      **Storage objects first, then DB rows.** `export_jobs` rows reference archive objects in Supabase Storage (per §3.1's app-local proxy delivery) and `chats` / `messages` may reference uploaded attachments (post-v1, but the ordering already needs to be right). Capture every storage path BEFORE the DB DELETEs run, then issue the storage `delete` calls; only THEN drop the DB rows. Otherwise the DB references are gone but the objects orphan in storage with no remaining lookup. Concretely:
 
      ```sql
-     -- Capture storage paths before DELETEs; the application reads these
-     -- into a list and issues `supabase.storage.delete(path)` for each
-     -- before continuing. Idempotent: a missing object is a no-op.
-     SELECT storage_path FROM export_jobs WHERE user_id = $1;
+     -- Capture export-job rows before the DELETE; the application
+     -- reconstructs each storage path by convention from (user_id, id)
+     -- — `exports/<user_id>/<job_id>.json.zip` — and issues
+     -- `supabase.storage.delete(path)` for each before continuing.
+     -- Idempotent: a missing object is a no-op. The `export_jobs`
+     -- schema (`back_end_architecture.md §3`) doesn't carry a separate
+     -- `storage_path` column; the path is derivable from the row.
+     SELECT id, user_id FROM export_jobs WHERE user_id = $1;
      ```
 
      ```sql
@@ -163,7 +167,7 @@ Two distinct touch-points:
      ```
 
   4. **Stripe**: read `stripe_customer_id` from the still-present `subscriptions` row, call `customer.delete` (or `customer.update` to anonymise per Stripe's retention rules — Stripe keeps payment-record traces by law). Idempotent via Stripe's `Idempotency-Key` header (set to `del-<user_id>` so retries collapse to one Stripe-side operation). The `subscriptions` row stays intact across step 4 AND beyond — it's not deleted here, because if step 5, 6, or 7 fails after step 4 commits, the hourly retry needs to re-enter the flow with `stripe_customer_id` still queryable to confirm Stripe-side state. The DELETE moves to step 7 (atomically with the completion marker).
-  5. **Resend**: add the email address to the suppression list. Idempotent.
+  5. **Resend**: in this exact order — (a) **send the deletion-confirmation email** to the user from a generic system address; (b) **then** add the email address to the Resend suppression list. Both halves are idempotent. The order matters: if the suppression-list write happens first, Resend would suppress the confirmation email and the user would never be told their account was deleted (the confirmation must precede suppression because a suppressed address can't receive). The confirmation must also precede step 6 because step 6 replaces `auth_users.email` with the `<id>@deleted.invalid` placeholder — after step 6 there's no real address left to send to.
   6. **DEK destruction + final PII anonymisation (LAST — irreversible).** Single transaction:
 
      ```sql
@@ -192,7 +196,7 @@ Two distinct touch-points:
 
      The hourly `process_deletion_queue` job (per `back_end_architecture.md §7`) retries any incomplete deletion (`completed_at IS NULL AND scheduled_for < now()`). Steps 4 + 6 are idempotent (Stripe call uses `Idempotency-Key`; the in-place anonymisation NULLs that are already NULL), so retries from anywhere upstream of step 7 are safe — they re-run the chain and converge. The single transaction here is the durable "deletion complete" commit; if it fails, `subscriptions` stays alive and the next retry can still read `stripe_customer_id` to re-confirm Stripe-side state before re-attempting the commit.
 
-- **Confirmation email** to the user from a generic system address before step 6 (so it's still sendable; after step 6 the user's data including email is gone).
+- **Confirmation email** is sent in step 5 (a) above, before either the Resend suppression-list write (5 (b)) or the step-6 PII anonymisation. Two reasons for that ordering: a suppressed address cannot receive the confirmation, and step 6 replaces the real address with a `<id>@deleted.invalid` placeholder so there's no recipient afterwards.
 - **Backups + crypto-erasure.** The wrapped DEK lives in `users.dek_wrapped` (the Postgres `users` table); this row is included in PITR + daily/weekly backups. Privacy policy discloses: deletion is immediately effective on the live database; full crypto-erasure completes when the last backup containing the wrapped DEK ages out — **≤ 35 days post-deletion** (the maximum backup retention per `deployment.md §8`). Until that window closes, an attacker with both backup access AND KMS access could in principle restore. Both are tightly controlled (backup access requires Supabase admin; KMS access requires the dedicated AWS sub-account); separately auditable.
 
 ### 3.4 Right to restrict processing
