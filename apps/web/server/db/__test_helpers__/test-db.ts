@@ -29,6 +29,15 @@ export interface TestEnv {
  * `describe.skipIf(!env)` so the lefthook pre-commit step (which
  * runs `vitest --changed` without the DB env) skips integration
  * suites cleanly instead of crashing on module load.
+ *
+ * **Hard-fails when CI is true.** Silently skipping these suites in
+ * CI would mask the only end-to-end coverage of the data-plane RLS
+ * + role-isolation guarantees — exactly the security tests CI must
+ * never let a config drift drop. GitHub Actions, GitLab CI, CircleCI,
+ * Buildkite and basically every other runner set `CI=true`; the
+ * env-missing path therefore throws when that signal is present.
+ * Local pre-commit + pure-unit-test runs (where `CI` is unset) keep
+ * the silent-skip behaviour so they don't require a Postgres.
  */
 export function readTestEnvOrSkip(): TestEnv | null {
   const databaseUrl = process.env.DATABASE_URL;
@@ -37,6 +46,15 @@ export function readTestEnvOrSkip(): TestEnv | null {
   const sessionProofSecret = process.env.NUANSU_DB_SESSION_PROOF_SECRET;
 
   if (!databaseUrl || !authDatabaseUrl || !migrateUrl || !sessionProofSecret) {
+    if (isCi()) {
+      throw new Error(
+        "Test DB env missing in CI context. Required: DATABASE_URL, " +
+          "AUTH_DATABASE_URL, MIGRATE_DATABASE_URL (or DIRECT_DATABASE_URL), " +
+          "NUANSU_DB_SESSION_PROOF_SECRET. Refusing to skip integration / " +
+          "fitness suites — these are the data-plane RLS + role-isolation " +
+          "security proofs and CI must run them. Fix the workflow env.",
+      );
+    }
     return null;
   }
   return {
@@ -48,6 +66,17 @@ export function readTestEnvOrSkip(): TestEnv | null {
     migratePassword: extractPassword(migrateUrl, "MIGRATE_DATABASE_URL"),
     sessionProofSecret,
   };
+}
+
+/**
+ * Detect a CI runner. GitHub Actions / GitLab CI / CircleCI /
+ * Buildkite / Travis all export `CI=true`; some legacy systems use
+ * `CI=1`. Anything else (local shell, lefthook pre-commit) is
+ * treated as non-CI.
+ */
+function isCi(): boolean {
+  const ci = process.env.CI;
+  return ci === "true" || ci === "1";
 }
 
 /**

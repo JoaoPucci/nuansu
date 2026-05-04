@@ -5,29 +5,28 @@
 // (vitest spawns one worker per file by default; without this hook,
 // each worker would re-run the migrations and collide on the
 // session_proof_secret upsert).
+//
+// CI vs local behaviour is delegated to readTestEnvOrSkip:
+//   - CI (CI=true|1) + missing env → throws, fails the run loudly.
+//   - Local + missing env → returns null; this hook prints a notice
+//     and returns so pure-unit suites still pass without a Postgres.
 
 import { runMigrations } from "../../server/db/migrate.js";
-import { readTestEnv } from "../../server/db/__test_helpers__/test-db.js";
+import { readTestEnvOrSkip } from "../../server/db/__test_helpers__/test-db.js";
 
 export default async function globalSetup(): Promise<void> {
-  // If the test DB env isn't configured, skip silently — pure-unit
-  // tests still pass without a Postgres.
-  try {
-    const env = readTestEnv();
-    await runMigrations({
-      migrateUrl: env.migrateUrl,
-      appPassword: env.appPassword,
-      authPassword: env.authPassword,
-      migratePassword: env.migratePassword,
-      sessionProofSecret: env.sessionProofSecret,
-    });
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("Test DB env missing")) {
-      console.warn(
-        "[global-db setup] Test DB env not configured — integration tests will be skipped.",
-      );
-      return;
-    }
-    throw err;
+  const env = readTestEnvOrSkip();
+  if (!env) {
+    console.warn(
+      "[global-db setup] Test DB env not configured — integration / fitness suites will be skipped (local only; CI hard-fails).",
+    );
+    return;
   }
+  await runMigrations({
+    migrateUrl: env.migrateUrl,
+    appPassword: env.appPassword,
+    authPassword: env.authPassword,
+    migratePassword: env.migratePassword,
+    sessionProofSecret: env.sessionProofSecret,
+  });
 }
