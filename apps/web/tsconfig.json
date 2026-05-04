@@ -3,7 +3,6 @@
   "compilerOptions": {
     "noEmit": true,
     "types": ["vite/client", "node", "@cloudflare/workers-types"],
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
       "@/server/*": ["./server/*"],
