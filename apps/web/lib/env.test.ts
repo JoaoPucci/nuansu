@@ -12,6 +12,7 @@ describe("parseServerEnv", () => {
     UPSTASH_REDIS_REST_TOKEN: "local_dev_token",
     BETTER_AUTH_SECRET: "x".repeat(64),
     BETTER_AUTH_URL: "http://localhost:5173",
+    NUANSU_DB_SESSION_PROOF_SECRET: "y".repeat(64),
     LLM_PROVIDER: "stub",
     STRIPE_PROVIDER: "stub",
     EMAIL_PROVIDER: "mailcrab",
@@ -47,6 +48,12 @@ describe("parseServerEnv", () => {
     expect(() => parseServerEnv({ ...validBase, BETTER_AUTH_SECRET: "tooshort" })).toThrow(
       /BETTER_AUTH_SECRET/,
     );
+  });
+
+  it("rejects a too-short NUANSU_DB_SESSION_PROOF_SECRET", () => {
+    expect(() =>
+      parseServerEnv({ ...validBase, NUANSU_DB_SESSION_PROOF_SECRET: "tooshort" }),
+    ).toThrow(/NUANSU_DB_SESSION_PROOF_SECRET/);
   });
 
   it("rejects a missing DATABASE_URL", () => {

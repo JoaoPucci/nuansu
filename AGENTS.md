@@ -260,6 +260,7 @@ Before a PR is reviewable:
 - [ ] If a test changed, it was either (a) a unit/integration test you strengthened, or (b) an acceptance/e2e test authored by a human and noted in the PR body.
 - [ ] If UI changed, you've verified it in a browser at mobile + desktop breakpoints; the screenshot holds up against the reference apps in `design_system.md §2`.
 - [ ] If a new dependency was added, it's justified in the PR description (size, license, maintenance posture).
+- [ ] If the PR changes the env contract (new/renamed/removed env vars), changes a required local service (Docker compose deltas, new ports, new external dependency), or changes a setup-time script (`pnpm db:migrate` invocation, new prerequisite step), the PR description includes a **"How to test locally"** section that explicitly lists the diff against the prior state and the exact commands to bring an existing local environment up to the new contract. Goal: a reviewer who's already QA'd the prior PR can re-test this one without hitting silent surprises (e.g., `pnpm db:migrate` failing with `Error: AUTH_DATABASE_URL is required` because their `.env` is on the old shape). The mid-phase per-PR section is a shortcut; the consolidated `private/tmp/phase-N-qa.md` rolls all sub-phase changes into one ordered procedure when the phase wraps.
 - [ ] Conventional-commit prefix on every commit; commit messages explain _why_.
 - [ ] Pre-commit hooks ran clean (no `--no-verify`).
 

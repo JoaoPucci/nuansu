@@ -21,9 +21,25 @@ const ServerEnvBase = z.object({
   DEFAULT_LOCALE: z.enum(["en", "ja"]).default("en"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace"]).default("info"),
 
-  // DB
+  // DB. Three roles (back_end_architecture.md §3.3):
+  //   DATABASE_URL          → nuansu_app  (runtime app traffic via db.forUser)
+  //   AUTH_DATABASE_URL     → nuansu_auth (Better Auth adapter only — wired in 2E.2)
+  //   MIGRATE_DATABASE_URL  → nuansu_migrate or superuser-equivalent (migration runner only)
+  // DIRECT_DATABASE_URL is the legacy single-URL alias kept so the existing
+  // CI definition (set in .github/workflows/ci.yml before the role split)
+  // continues to load while the workflow rolls forward.
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
+  AUTH_DATABASE_URL: z.string().min(1).optional(),
+  MIGRATE_DATABASE_URL: z.string().min(1).optional(),
   DIRECT_DATABASE_URL: z.string().min(1).optional(),
+
+  // Session-proof HMAC secret. Read by db.forUser to sign each
+  // transaction's nuansu.session_proof; the same value is stored in
+  // nuansu.config so nuansu.verify_hmac() can recompute and compare.
+  // Rotation procedure: docs/security.md §11.
+  NUANSU_DB_SESSION_PROOF_SECRET: z
+    .string()
+    .min(32, "NUANSU_DB_SESSION_PROOF_SECRET must be ≥ 32 chars (use openssl rand -hex 32)"),
 
   // Redis
   UPSTASH_REDIS_REST_URL: z.string().url(),

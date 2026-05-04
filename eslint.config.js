@@ -151,6 +151,12 @@ export default tseslint.config(
       "apps/web/lib/env.ts",
       "**/*.config.{js,ts,mjs,cjs}",
       "scripts/**/*.{js,mjs,cjs,ts}",
+      "**/scripts/**/*.{js,mjs,cjs,ts}",
+      // Test infrastructure (DB harness, global setup) bootstraps the
+      // ephemeral Postgres before the app boots — earlier than env.ts
+      // can validate. Reads its own minimal env directly.
+      "**/__test_helpers__/**/*.ts",
+      "apps/web/test/setup/**/*.ts",
       "**/*.test.{ts,tsx,mjs}",
       "**/*.spec.ts",
       "**/*.bench.ts",
