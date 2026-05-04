@@ -28,6 +28,25 @@ Quality gates and testing policy: see docs/quality.md.
      For server changes: list the integration tests run + any manual curl/repro steps.
      "All tests pass" is not a test plan. -->
 
+## How to test locally
+
+<!-- AGENTS.md §5: required when this PR changes the env contract (new/renamed/
+     removed env vars), required local services (Docker compose deltas, new
+     ports, new external dependency), or setup-time scripts (pnpm db:migrate
+     invocation, new prerequisite step). Goal: a reviewer who's already QA'd
+     the prior PR can re-test this one without silent surprises.
+     The mid-phase per-PR section is a shortcut; private/tmp/phase-N-qa.md
+     consolidates everything when the phase wraps. -->
+
+- [ ] No env / local-service / setup-script change in this PR.
+- [ ] This PR changes the local-setup contract; the diff and exact commands
+      to bring an existing local environment up to date are documented below:
+
+<!-- For env changes, table of var | before | after.
+     For service changes, the docker compose / port / dependency delta.
+     For setup-script changes, the new ordered command list.
+     Plus: the exact one-liner sequence to re-test from a wiped/reset state. -->
+
 ## Documentation discipline
 
 <!-- AGENTS.md §3.4: code changes that alter documented behaviour must update /docs/ in the same PR. -->
