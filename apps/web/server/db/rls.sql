@@ -108,6 +108,18 @@ CREATE TRIGGER auth_user_to_app_user
 -- granted above). Each policy spelled out so a fitness test can
 -- introspect pg_policies and assert the predicate text contains
 -- "nuansu.current_user_id()".
+--
+-- Tables that hold BOTH `user_id` AND a `chat_id` FK (messages,
+-- pref_suggestions, usage_events, name_locks) get an additional clause
+-- that constrains `chat_id` to a chat the caller owns. Without it,
+-- `user_id = self` alone would let an attacker INSERT a message with
+-- `user_id=self, chat_id=<other tenant's chat>`: RLS passes (user_id
+-- matches), the FK passes (chat exists), and the result is a
+-- cross-tenant data link. It would also leak chat existence via
+-- FK-success-vs-failure timing on probe inserts. The chat-ownership
+-- subquery is itself RLS-filtered through `chats_owner_only`, so the
+-- explicit `WHERE user_id = …` clause is defence-in-depth (kicks in
+-- even if a future change loosens chats' policy).
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS users_owner_only ON public.users;
@@ -137,19 +149,33 @@ CREATE POLICY preferences_chat_owner_only ON public.preferences_chat
   USING (chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id()))
   WITH CHECK (chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id()));
 
+-- name_locks: chat_id is nullable (NULL = global lock). Permit NULL,
+-- otherwise require ownership of the referenced chat.
 ALTER TABLE public.name_locks ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS name_locks_owner_only ON public.name_locks;
 CREATE POLICY name_locks_owner_only ON public.name_locks
   FOR ALL TO nuansu_app
-  USING (user_id = nuansu.current_user_id())
-  WITH CHECK (user_id = nuansu.current_user_id());
+  USING (
+    user_id = nuansu.current_user_id()
+    AND (chat_id IS NULL OR chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id()))
+  )
+  WITH CHECK (
+    user_id = nuansu.current_user_id()
+    AND (chat_id IS NULL OR chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id()))
+  );
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS messages_owner_only ON public.messages;
 CREATE POLICY messages_owner_only ON public.messages
   FOR ALL TO nuansu_app
-  USING (user_id = nuansu.current_user_id())
-  WITH CHECK (user_id = nuansu.current_user_id());
+  USING (
+    user_id = nuansu.current_user_id()
+    AND chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id())
+  )
+  WITH CHECK (
+    user_id = nuansu.current_user_id()
+    AND chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id())
+  );
 
 ALTER TABLE public.message_versions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS message_versions_owner_only ON public.message_versions;
@@ -169,15 +195,28 @@ ALTER TABLE public.pref_suggestions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS pref_suggestions_owner_only ON public.pref_suggestions;
 CREATE POLICY pref_suggestions_owner_only ON public.pref_suggestions
   FOR ALL TO nuansu_app
-  USING (user_id = nuansu.current_user_id())
-  WITH CHECK (user_id = nuansu.current_user_id());
+  USING (
+    user_id = nuansu.current_user_id()
+    AND chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id())
+  )
+  WITH CHECK (
+    user_id = nuansu.current_user_id()
+    AND chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id())
+  );
 
+-- usage_events: chat_id is nullable (some events are not chat-scoped).
 ALTER TABLE public.usage_events ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS usage_events_owner_only ON public.usage_events;
 CREATE POLICY usage_events_owner_only ON public.usage_events
   FOR ALL TO nuansu_app
-  USING (user_id = nuansu.current_user_id())
-  WITH CHECK (user_id = nuansu.current_user_id());
+  USING (
+    user_id = nuansu.current_user_id()
+    AND (chat_id IS NULL OR chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id()))
+  )
+  WITH CHECK (
+    user_id = nuansu.current_user_id()
+    AND (chat_id IS NULL OR chat_id IN (SELECT id FROM public.chats WHERE user_id = nuansu.current_user_id()))
+  );
 
 ALTER TABLE public.subscriptions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS subscriptions_owner_only ON public.subscriptions;

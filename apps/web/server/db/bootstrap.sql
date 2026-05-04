@@ -30,6 +30,15 @@ CREATE SCHEMA IF NOT EXISTS nuansu AUTHORIZATION nuansu_migrate;
 -- on that table) — only nuansu_migrate can read the HMAC secret.
 GRANT USAGE ON SCHEMA nuansu TO nuansu_app, nuansu_auth;
 
+-- nuansu_migrate needs USAGE + CREATE on the public schema so future
+-- migrations (run by nuansu_migrate rather than the platform superuser)
+-- can add tables / functions / sequences. On Postgres 15+ the default
+-- `CREATE on public` for PUBLIC was removed; without this explicit
+-- grant, switching MIGRATE_DATABASE_URL to nuansu_migrate would fail
+-- on the next schema-adding migration with `permission denied for
+-- schema public`.
+GRANT USAGE, CREATE ON SCHEMA public TO nuansu_migrate;
+
 -- nuansu.config: server-side store for the HMAC secret used by
 -- nuansu.verify_hmac(). Owned by nuansu_migrate; no other role has any
 -- privilege on it. The secret is INSERTed by the migrate runner from

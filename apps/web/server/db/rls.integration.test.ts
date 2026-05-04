@@ -111,6 +111,102 @@ describeIntegration("RLS — application-table scoping", () => {
   });
 });
 
+describeIntegration("RLS — cross-tenant chat_id reference attack", () => {
+  it("nuansu_app cannot INSERT a message with another user's chat_id", async () => {
+    if (!env) return;
+    const userA = await seedAuthUser(env, { email: "owner-a@test.invalid" });
+    const userB = await seedAuthUser(env, { email: "attacker-b@test.invalid" });
+
+    // userA owns a chat.
+    const aChatId = uuidv7();
+    await forUser(
+      env.databaseUrl,
+      { userId: userA, sessionProofSecret: env.sessionProofSecret },
+      async (tx) => {
+        await tx.execute(sql`
+          INSERT INTO chats (id, user_id, name, target_language)
+          VALUES (${aChatId}, ${userA}, 'A-private', 'ja')
+        `);
+      },
+    );
+
+    // userB (attacker) attempts to INSERT a message with their own
+    // user_id but A's chat_id. Without the chat-ownership clause in
+    // messages_owner_only, this would succeed (user_id matches, FK
+    // matches) and create a cross-tenant data link. With the fix,
+    // RLS WITH CHECK fails.
+    const empty = new Uint8Array(0);
+    await expect(
+      forUser(
+        env.databaseUrl,
+        { userId: userB, sessionProofSecret: env.sessionProofSecret },
+        async (tx) => {
+          await tx.execute(sql`
+            INSERT INTO messages (
+              id, chat_id, user_id, direction,
+              final_target_text, final_target_text_nonce,
+              final_source_text, final_source_text_nonce,
+              prefs_snapshot, prefs_snapshot_nonce,
+              model, prompt_version
+            )
+            VALUES (
+              ${uuidv7()}, ${aChatId}, ${userB}, 'outbound',
+              ${empty}, ${empty},
+              ${empty}, ${empty},
+              ${empty}, ${empty},
+              'stub', 'v1'
+            )
+          `);
+        },
+      ),
+    ).rejects.toMatchObject({
+      // Drizzle wraps the Postgres error; the actual RLS violation
+      // sits on `.cause`. PG code 42501 = "new row violates row-level
+      // security policy". Asserting on the code (not message text)
+      // also future-proofs against minor Postgres wording shifts.
+      cause: expect.objectContaining({ code: "42501" }) as unknown,
+    });
+  });
+
+  it("nuansu_app cannot INSERT a name_lock pinned to another user's chat_id", async () => {
+    if (!env) return;
+    const userA = await seedAuthUser(env, { email: "owner-a-nl@test.invalid" });
+    const userB = await seedAuthUser(env, { email: "attacker-b-nl@test.invalid" });
+
+    const aChatId = uuidv7();
+    await forUser(
+      env.databaseUrl,
+      { userId: userA, sessionProofSecret: env.sessionProofSecret },
+      async (tx) => {
+        await tx.execute(sql`
+          INSERT INTO chats (id, user_id, name, target_language)
+          VALUES (${aChatId}, ${userA}, 'A-nl', 'ja')
+        `);
+      },
+    );
+
+    const empty = new Uint8Array(0);
+    await expect(
+      forUser(
+        env.databaseUrl,
+        { userId: userB, sessionProofSecret: env.sessionProofSecret },
+        async (tx) => {
+          await tx.execute(sql`
+            INSERT INTO name_locks (id, user_id, chat_id, source_form, source_form_nonce)
+            VALUES (${uuidv7()}, ${userB}, ${aChatId}, ${empty}, ${empty})
+          `);
+        },
+      ),
+    ).rejects.toMatchObject({
+      // Drizzle wraps the Postgres error; the actual RLS violation
+      // sits on `.cause`. PG code 42501 = "new row violates row-level
+      // security policy". Asserting on the code (not message text)
+      // also future-proofs against minor Postgres wording shifts.
+      cause: expect.objectContaining({ code: "42501" }) as unknown,
+    });
+  });
+});
+
 describeIntegration("Role separation — grant-layer denial", () => {
   it("nuansu_app cannot SELECT from auth_users (no GRANT)", async () => {
     if (!env) return;
