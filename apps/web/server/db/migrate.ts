@@ -36,6 +36,35 @@ function noopNotice(): void {
   /* swallow Postgres NOTICE messages emitted by idempotent DDL */
 }
 
+/**
+ * Build the SET search_path string to use for the Drizzle migration
+ * step. Always starts with `public` (so unqualified CREATE TABLEs land
+ * there rather than in the migrate-role's eponymous schema), then
+ * includes the citext extension's actual schema if it differs from
+ * public, then `pg_catalog` and `pg_temp` per security.md §13.2.
+ *
+ * Schema names from pg_namespace are validated by Postgres and safe to
+ * inline; we still double-quote them to be explicit.
+ */
+async function buildMigrateSearchPath(sql: ReturnType<typeof postgres>): Promise<string> {
+  const rows = await sql<{ extname: string; nspname: string }[]>`
+    SELECT e.extname, n.nspname
+    FROM pg_catalog.pg_extension e
+    JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+    WHERE e.extname IN ('citext', 'pgcrypto')
+  `;
+  const citext = rows.find((r) => r.extname === "citext");
+  if (!citext) {
+    throw new Error("citext extension not installed by bootstrap");
+  }
+  const parts = [`"public"`];
+  if (citext.nspname !== "public") {
+    parts.push(`"${citext.nspname.replace(/"/g, '""')}"`);
+  }
+  parts.push("pg_catalog", "pg_temp");
+  return parts.join(", ");
+}
+
 function pgLiteral(value: string): string {
   // Postgres SQL literal: wrap in single quotes, double any embedded single quotes.
   return `'${value.replace(/'/g, "''")}'`;
@@ -112,14 +141,20 @@ export async function runMigrations(opts: MigrateOptions): Promise<void> {
     //    trigger function, nuansu.config table.
     await applySqlFile(sql, bootstrapSqlPath());
 
-    // 3. Application schema via Drizzle. Pin the session search_path to
-    //    `public` first — bootstrap created a `nuansu` schema and the
-    //    default search_path is `"$user", public`. If the migrating
-    //    role's name matches a schema (it always does in dev/CI where
-    //    the role is `nuansu`), unqualified `CREATE TABLE` lands in
-    //    that schema instead of `public`, and the cross-table FK
-    //    constraints (`REFERENCES "public"."users"`) fail.
-    await sql.unsafe(`SET search_path = public, pg_catalog, pg_temp`);
+    // 3. Application schema via Drizzle. Pin the session search_path
+    //    so that:
+    //      - unqualified `CREATE TABLE` lands in `public` (the default
+    //        `"$user", public` would otherwise put tables in the
+    //        migrate-role's eponymous schema, e.g. `nuansu`, and the
+    //        cross-table FK constraints `REFERENCES "public"."users"`
+    //        would fail);
+    //      - unqualified `citext` type references in the generated
+    //        migration resolve correctly even when the citext extension
+    //        was pre-installed in a non-public schema (managed Postgres
+    //        environments commonly install extensions in `extensions`).
+    //    Both schemas are looked up dynamically — see citextSchema.
+    const searchPath = await buildMigrateSearchPath(sql);
+    await sql.unsafe(`SET search_path = ${searchPath}`);
     const migrateDb = drizzle(sql);
     await drizzleMigrate(migrateDb, { migrationsFolder: migrationsDir() });
 

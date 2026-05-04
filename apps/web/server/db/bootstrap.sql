@@ -10,19 +10,17 @@
 -- docs/security.md §13.2 (SECURITY DEFINER hardening: pinned
 -- search_path + schema-qualified built-ins).
 
--- pgcrypto for hmac(); create in its own schema so the function can be
--- referenced without depending on the public-schema search_path.
--- nuansu.verify_hmac (SECURITY DEFINER, owner=nuansu_migrate) calls
--- pgcrypto.hmac(); it needs USAGE on the schema and EXECUTE on the
--- function. The app + auth roles do NOT need either — they only ever
--- call nuansu.verify_hmac through nuansu.current_user_id().
-CREATE SCHEMA IF NOT EXISTS pgcrypto;
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA pgcrypto;
-GRANT USAGE ON SCHEMA pgcrypto TO nuansu_migrate;
-
--- citext for case-insensitive text columns (auth_users.email, waitlist.email).
--- Lives in the default (public) schema; that's the conventional install
--- location and Postgres's recommended default for citext usage.
+-- pgcrypto for hmac(), citext for case-insensitive email columns.
+--
+-- Both are installed without `WITH SCHEMA` — `CREATE EXTENSION IF NOT
+-- EXISTS … WITH SCHEMA …` does NOT relocate an extension that is
+-- already installed elsewhere, and managed Postgres environments
+-- (Supabase, RDS) routinely pre-install pgcrypto in `extensions` or
+-- `public`. The DO block below discovers wherever pgcrypto landed and
+-- bakes that schema into `nuansu.verify_hmac`'s SET search_path; the
+-- migration runner does the same lookup for citext before invoking
+-- Drizzle's migrator (see migrate.ts).
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE SCHEMA IF NOT EXISTS nuansu AUTHORIZATION nuansu_migrate;
@@ -53,50 +51,80 @@ REVOKE ALL ON TABLE nuansu.config FROM PUBLIC;
 -- Returns false when the secret is missing (during the very first
 -- bootstrap, before the migrate runner inserts it) so the system
 -- fails closed instead of allowing every proof.
-CREATE OR REPLACE FUNCTION nuansu.verify_hmac(
-  claimed_user_id  text,
-  claimed_hmac_hex text
-)
-RETURNS boolean
-LANGUAGE plpgsql
-SECURITY DEFINER
-STABLE
-SET search_path = nuansu, pg_catalog, pg_temp
-AS $$
+--
+-- The function is created via a DO block so the discovered pgcrypto
+-- schema can be baked into the function's SET search_path. `hmac()`
+-- inside the body is unqualified and resolves via that search_path —
+-- so it works whether pgcrypto landed in `public`, `extensions`,
+-- `pgcrypto`, or anywhere else the platform installed it.
+DO $bootstrap_verify_hmac$
 DECLARE
-  secret        bytea;
-  expected_hmac bytea;
-  claimed_hmac  bytea;
+  pgcrypto_schema text;
 BEGIN
-  IF claimed_user_id IS NULL OR claimed_hmac_hex IS NULL THEN
-    RETURN false;
+  SELECT n.nspname INTO pgcrypto_schema
+    FROM pg_catalog.pg_extension e
+    JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+    WHERE e.extname = 'pgcrypto';
+
+  IF pgcrypto_schema IS NULL THEN
+    RAISE EXCEPTION 'pgcrypto extension is not installed';
   END IF;
 
-  SELECT value INTO secret FROM nuansu.config WHERE key = 'session_proof_secret';
-  IF secret IS NULL THEN
-    RETURN false;
-  END IF;
+  -- nuansu_migrate runs the verify_hmac body (SECURITY DEFINER) and
+  -- needs USAGE on the extension's schema to resolve hmac(). The app
+  -- and auth roles do NOT need it — they only call nuansu.verify_hmac
+  -- via nuansu.current_user_id() which is also SECURITY DEFINER.
+  EXECUTE pg_catalog.format('GRANT USAGE ON SCHEMA %I TO nuansu_migrate', pgcrypto_schema);
 
-  expected_hmac := pgcrypto.hmac(pg_catalog.convert_to(claimed_user_id, 'UTF8'), secret, 'sha256');
+  EXECUTE pg_catalog.format(
+    $verify$
+      CREATE OR REPLACE FUNCTION nuansu.verify_hmac(
+        claimed_user_id  text,
+        claimed_hmac_hex text
+      )
+      RETURNS boolean
+      LANGUAGE plpgsql
+      SECURITY DEFINER
+      STABLE
+      SET search_path = nuansu, %I, pg_catalog, pg_temp
+      AS $body$
+      DECLARE
+        secret        bytea;
+        expected_hmac bytea;
+        claimed_hmac  bytea;
+      BEGIN
+        IF claimed_user_id IS NULL OR claimed_hmac_hex IS NULL THEN
+          RETURN false;
+        END IF;
 
-  -- decode() is in pg_catalog. claimed_hmac_hex is expected to be 64
-  -- lowercase hex chars; if the input is malformed, decode() raises
-  -- and the caller catches as RETURN false.
-  BEGIN
-    claimed_hmac := pg_catalog.decode(claimed_hmac_hex, 'hex');
-  EXCEPTION WHEN OTHERS THEN
-    RETURN false;
-  END;
+        SELECT value INTO secret FROM nuansu.config WHERE key = 'session_proof_secret';
+        IF secret IS NULL THEN
+          RETURN false;
+        END IF;
 
-  -- Length-prefixed equality: bytea equality only proceeds when lengths
-  -- match (no early-byte short-circuit through differing lengths).
-  IF pg_catalog.octet_length(expected_hmac) <> pg_catalog.octet_length(claimed_hmac) THEN
-    RETURN false;
-  END IF;
+        -- hmac() resolves via search_path (set on this function above)
+        -- to the discovered pgcrypto schema. convert_to + decode +
+        -- octet_length are pg_catalog and stay schema-qualified.
+        expected_hmac := hmac(pg_catalog.convert_to(claimed_user_id, 'UTF8'), secret, 'sha256');
 
-  RETURN expected_hmac = claimed_hmac;
+        BEGIN
+          claimed_hmac := pg_catalog.decode(claimed_hmac_hex, 'hex');
+        EXCEPTION WHEN OTHERS THEN
+          RETURN false;
+        END;
+
+        IF pg_catalog.octet_length(expected_hmac) <> pg_catalog.octet_length(claimed_hmac) THEN
+          RETURN false;
+        END IF;
+
+        RETURN expected_hmac = claimed_hmac;
+      END;
+      $body$;
+    $verify$,
+    pgcrypto_schema
+  );
 END;
-$$;
+$bootstrap_verify_hmac$;
 
 ALTER FUNCTION nuansu.verify_hmac(text, text) OWNER TO nuansu_migrate;
 REVOKE ALL ON FUNCTION nuansu.verify_hmac(text, text) FROM PUBLIC;
