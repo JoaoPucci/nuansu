@@ -87,31 +87,108 @@ async function buildMigrateSearchPath(sql: ReturnType<typeof postgres>): Promise
  * depend on.
  *
  * Two steps because Postgres needs both:
- *   - `ALTER ROLE … SET search_path` so the role finds citext's
- *     operators by name resolution.
  *   - `GRANT USAGE ON SCHEMA <citext_schema>` so the role is allowed
- *     to actually USE objects in that schema. Without USAGE, citext
- *     operators silently fail to bind and equality falls back to text.
+ *     to USE objects in that schema. Without USAGE, citext operators
+ *     silently fail to bind and equality falls back to text.
+ *   - `ALTER ROLE … SET search_path` so the role finds those operators
+ *     by name resolution.
  *
- * `ALTER ROLE … SET search_path` persists across connections and is
- * inherited by every new session for that role. Idempotent.
+ * Both mutations are idempotency-aware: each step is skipped when the
+ * desired state is already in place. This matters for reruns where
+ * `MIGRATE_DATABASE_URL` points at a role (e.g., `nuansu_migrate` on a
+ * managed Postgres) that does NOT own the extension schema and would
+ * therefore fail to re-issue `GRANT USAGE` even though the privilege
+ * is already present from first-bootstrap. Same reasoning for ALTER
+ * ROLE which (Postgres 16+) requires ADMIN OPTION on the target role.
+ *
+ * The first bootstrap runs as the platform superuser and seeds both;
+ * subsequent runs detect the state and become no-ops.
  */
 async function setRuntimeSearchPath(sql: ReturnType<typeof postgres>): Promise<void> {
   const citextSchema = await discoverCitextSchema(sql);
   const parts = [`"public"`];
   if (citextSchema !== "public") {
     parts.push(quoteSchema(citextSchema));
-    // GRANT USAGE so the runtime roles can resolve the citext type +
-    // its operators in the extension's schema. Public is always usable
-    // by any role; non-public extension schemas need an explicit grant.
-    await sql.unsafe(
-      `GRANT USAGE ON SCHEMA ${quoteSchema(citextSchema)} TO ${pgIdentifier("nuansu_app")}, ${pgIdentifier("nuansu_auth")}`,
-    );
+    await ensureSchemaUsageGranted(sql, citextSchema, ["nuansu_app", "nuansu_auth"]);
   }
   const searchPath = parts.join(", ");
   for (const role of ["nuansu_app", "nuansu_auth"] as const) {
-    await sql.unsafe(`ALTER ROLE ${pgIdentifier(role)} SET search_path = ${searchPath}`);
+    await ensureRoleSearchPath(sql, role, searchPath);
   }
+}
+
+/**
+ * Skip the GRANT when both target roles already have USAGE on the
+ * given schema. Avoids `permission denied for schema …` on reruns by
+ * a non-owner (managed-Postgres operator role lacks ownership of the
+ * platform-managed `extensions` schema).
+ */
+async function ensureSchemaUsageGranted(
+  sql: ReturnType<typeof postgres>,
+  schema: string,
+  roles: readonly RoleName[],
+): Promise<void> {
+  const checks = await sql<{ rolname: string; has_usage: boolean }[]>`
+    SELECT r.rolname, pg_catalog.has_schema_privilege(r.oid, ${schema}, 'USAGE') AS has_usage
+    FROM pg_catalog.pg_roles r
+    WHERE r.rolname = ANY(${roles})
+  `;
+  const missing = checks.filter((c) => !c.has_usage).map((c) => c.rolname);
+  if (missing.length === 0) return;
+  // Validate role names against the allowlist before inlining into DDL.
+  const ids = missing.map((r) => pgIdentifier(r as RoleName)).join(", ");
+  await sql.unsafe(`GRANT USAGE ON SCHEMA ${quoteSchema(schema)} TO ${ids}`);
+}
+
+/**
+ * Skip the ALTER ROLE when the role's stored default search_path
+ * already matches the desired value. Postgres normalises the stored
+ * setting (drops quotes around regular identifiers, trims trailing
+ * pg_catalog/pg_temp), so the comparison is loose: it asserts every
+ * non-implicit schema we want appears in the stored entry.
+ */
+async function ensureRoleSearchPath(
+  sql: ReturnType<typeof postgres>,
+  role: RoleName,
+  desired: string,
+): Promise<void> {
+  const rows = await sql<{ setconfig: string[] | null }[]>`
+    SELECT s.setconfig
+    FROM pg_catalog.pg_db_role_setting s
+    JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
+    WHERE r.rolname = ${role}
+      AND (s.setdatabase = 0
+           OR s.setdatabase = (SELECT oid FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()))
+  `;
+  const desiredSchemas = parseSearchPathSchemas(desired);
+  for (const row of rows) {
+    const cfg = row.setconfig ?? [];
+    const stored = cfg.find((c) => c.startsWith("search_path="));
+    if (!stored) continue;
+    const storedSchemas = parseSearchPathSchemas(stored.replace(/^search_path=\s*/, ""));
+    if (desiredSchemas.every((s) => storedSchemas.includes(s))) {
+      return;
+    }
+  }
+  await sql.unsafe(`ALTER ROLE ${pgIdentifier(role)} SET search_path = ${desired}`);
+}
+
+/**
+ * Pull the schema names out of a SET search_path string. Drops
+ * pg_catalog and pg_temp (always implicit), strips quotes from each
+ * remaining entry, lowercases. Used to compare a desired path against
+ * Postgres's normalised stored value.
+ */
+function parseSearchPathSchemas(value: string): string[] {
+  return value
+    .split(",")
+    .map((part) =>
+      part
+        .trim()
+        .replace(/^"(.*)"$/, "$1")
+        .toLowerCase(),
+    )
+    .filter((part) => part.length > 0 && part !== "pg_catalog" && part !== "pg_temp");
 }
 
 function pgLiteral(value: string): string {
