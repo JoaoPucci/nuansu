@@ -40,6 +40,23 @@ function noopNotice(): void {
   /* swallow Postgres NOTICE messages emitted by idempotent DDL */
 }
 
+async function discoverCitextSchema(sql: ReturnType<typeof postgres>): Promise<string> {
+  const [row] = await sql<{ nspname: string }[]>`
+    SELECT n.nspname
+    FROM pg_catalog.pg_extension e
+    JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+    WHERE e.extname = 'citext'
+  `;
+  if (!row) {
+    throw new Error("citext extension not installed by bootstrap");
+  }
+  return row.nspname;
+}
+
+function quoteSchema(name: string): string {
+  return `"${name.replace(/"/g, '""')}"`;
+}
+
 /**
  * Build the SET search_path string to use for the Drizzle migration
  * step. Always starts with `public` (so unqualified CREATE TABLEs land
@@ -51,22 +68,50 @@ function noopNotice(): void {
  * inline; we still double-quote them to be explicit.
  */
 async function buildMigrateSearchPath(sql: ReturnType<typeof postgres>): Promise<string> {
-  const rows = await sql<{ extname: string; nspname: string }[]>`
-    SELECT e.extname, n.nspname
-    FROM pg_catalog.pg_extension e
-    JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
-    WHERE e.extname IN ('citext', 'pgcrypto')
-  `;
-  const citext = rows.find((r) => r.extname === "citext");
-  if (!citext) {
-    throw new Error("citext extension not installed by bootstrap");
-  }
+  const citextSchema = await discoverCitextSchema(sql);
   const parts = [`"public"`];
-  if (citext.nspname !== "public") {
-    parts.push(`"${citext.nspname.replace(/"/g, '""')}"`);
+  if (citextSchema !== "public") {
+    parts.push(quoteSchema(citextSchema));
   }
   parts.push("pg_catalog", "pg_temp");
   return parts.join(", ");
+}
+
+/**
+ * Set role-level default search_path on nuansu_app + nuansu_auth so
+ * every runtime session for those roles resolves the citext type's
+ * comparison operators correctly — without this, `citext` columns on
+ * managed Postgres (where the extension lives in `extensions` rather
+ * than `public`) would resolve `=` to text equality and lose the
+ * case-insensitive semantics that auth_users.email and waitlist.email
+ * depend on.
+ *
+ * Two steps because Postgres needs both:
+ *   - `ALTER ROLE … SET search_path` so the role finds citext's
+ *     operators by name resolution.
+ *   - `GRANT USAGE ON SCHEMA <citext_schema>` so the role is allowed
+ *     to actually USE objects in that schema. Without USAGE, citext
+ *     operators silently fail to bind and equality falls back to text.
+ *
+ * `ALTER ROLE … SET search_path` persists across connections and is
+ * inherited by every new session for that role. Idempotent.
+ */
+async function setRuntimeSearchPath(sql: ReturnType<typeof postgres>): Promise<void> {
+  const citextSchema = await discoverCitextSchema(sql);
+  const parts = [`"public"`];
+  if (citextSchema !== "public") {
+    parts.push(quoteSchema(citextSchema));
+    // GRANT USAGE so the runtime roles can resolve the citext type +
+    // its operators in the extension's schema. Public is always usable
+    // by any role; non-public extension schemas need an explicit grant.
+    await sql.unsafe(
+      `GRANT USAGE ON SCHEMA ${quoteSchema(citextSchema)} TO ${pgIdentifier("nuansu_app")}, ${pgIdentifier("nuansu_auth")}`,
+    );
+  }
+  const searchPath = parts.join(", ");
+  for (const role of ["nuansu_app", "nuansu_auth"] as const) {
+    await sql.unsafe(`ALTER ROLE ${pgIdentifier(role)} SET search_path = ${searchPath}`);
+  }
 }
 
 function pgLiteral(value: string): string {
@@ -183,7 +228,13 @@ export async function runMigrations(opts: MigrateOptions): Promise<void> {
     //    AFTER Drizzle so the tables exist.
     await applySqlFile(sql, rlsSqlPath());
 
-    // 5. Persist the session-proof HMAC secret so nuansu.verify_hmac
+    // 5. Pin runtime roles' default search_path so every session
+    //    resolves citext operators correctly (managed Postgres puts
+    //    extensions in non-public schemas; without this, citext
+    //    columns silently degrade to text comparison).
+    await setRuntimeSearchPath(sql);
+
+    // 6. Persist the session-proof HMAC secret so nuansu.verify_hmac
     //    can recompute and compare on every RLS evaluation.
     await setSessionProofSecret(sql, opts.sessionProofSecret);
   } finally {
