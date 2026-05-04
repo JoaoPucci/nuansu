@@ -16,8 +16,9 @@
 
 import postgres from "postgres";
 import { uuidv7 } from "uuidv7";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { runMigrations } from "./migrate.js";
 import { readTestEnvOrSkip, truncateAppData } from "./__test_helpers__/test-db.js";
 
 const env = readTestEnvOrSkip();
@@ -106,4 +107,95 @@ describeIntegration("citext — runtime case-insensitive comparison", () => {
       await app.end({ timeout: 1 });
     }
   });
+});
+
+describeIntegration("ensureRoleSearchPath — DB-scoped takes precedence over role-global", () => {
+  // Restore the migrate-driven state after the precedence test mutates
+  // it directly via SQL, so subsequent test files start clean.
+  afterEach(async () => {
+    if (env) {
+      await runMigrations({
+        migrateUrl: env.migrateUrl,
+        appPassword: env.appPassword,
+        authPassword: env.authPassword,
+        migratePassword: env.migratePassword,
+        sessionProofSecret: env.sessionProofSecret,
+      });
+    }
+  });
+
+  it("re-applying migrate corrects a stale DB-scoped search_path even when the role-global one matches", async () => {
+    if (!env) return;
+    const raw = postgres(env.migrateUrl, { max: 1 });
+    try {
+      // Inject an INTENTIONALLY STALE DB-scoped search_path on
+      // nuansu_auth that's CLEARLY DIFFERENT from desired (no
+      // `public`, only `pg_temp`). The role-global value was set
+      // correctly by globalSetup's migrate run. Without the
+      // precedence detection, ensureRoleSearchPath would read the
+      // matching global row first and return early — runtime
+      // sessions would still see the stale DB-scoped value (no
+      // public schema → user-scoped tables unreachable).
+      await raw.unsafe(`ALTER ROLE nuansu_auth IN DATABASE nuansu SET search_path = 'pg_temp'`);
+
+      const before = await raw<{ setconfig: string[] | null }[]>`
+          SELECT setconfig
+          FROM pg_catalog.pg_db_role_setting s
+          JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
+          WHERE r.rolname = 'nuansu_auth'
+            AND s.setdatabase = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+        `;
+      expect(before).toHaveLength(1);
+      expect(before[0]?.setconfig?.[0]).toBe("search_path=pg_temp");
+
+      // Re-run migrations. The precedence-aware check detects the
+      // stale DB-scoped value, RESETs the DB-scoped search_path
+      // entry, then re-writes the role-global with the desired
+      // value.
+      await runMigrations({
+        migrateUrl: env.migrateUrl,
+        appPassword: env.appPassword,
+        authPassword: env.authPassword,
+        migratePassword: env.migratePassword,
+        sessionProofSecret: env.sessionProofSecret,
+      });
+
+      // After: DB-scoped row's search_path entry is gone (RESET
+      // dropped just that setting; the row itself may stay if other
+      // DB-scoped settings exist, but search_path entry is removed),
+      // and the role-global one has `public`.
+      const dbScoped = await raw<{ setconfig: string[] | null }[]>`
+          SELECT setconfig
+          FROM pg_catalog.pg_db_role_setting s
+          JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
+          WHERE r.rolname = 'nuansu_auth'
+            AND s.setdatabase = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database())
+        `;
+      const dbScopedSearchPath = dbScoped[0]?.setconfig?.find((c) => c.startsWith("search_path="));
+      // Either the DB-scoped row is gone entirely (RESET on the only
+      // setting drops the row), or it survives without search_path.
+      expect(dbScopedSearchPath).toBeUndefined();
+
+      // Effective lookup (DB-scoped first, then global). Without the
+      // stale DB-scoped row in the way, the global wins and now
+      // contains `public`.
+      const effective = await raw<{ setconfig: string[] | null }[]>`
+          SELECT setconfig
+          FROM pg_catalog.pg_db_role_setting s
+          JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
+          WHERE r.rolname = 'nuansu_auth'
+            AND (s.setdatabase = 0
+                 OR s.setdatabase = (SELECT oid FROM pg_catalog.pg_database WHERE datname = current_database()))
+          ORDER BY s.setdatabase DESC
+          LIMIT 1
+        `;
+      const effectiveSearchPath = effective[0]?.setconfig?.find((c) =>
+        c.startsWith("search_path="),
+      );
+      expect(effectiveSearchPath).toBeDefined();
+      expect(effectiveSearchPath).toMatch(/\bpublic\b/);
+    } finally {
+      await raw.end({ timeout: 1 });
+    }
+  }, 20_000);
 });

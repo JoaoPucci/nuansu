@@ -146,30 +146,61 @@ async function ensureSchemaUsageGranted(
  * setting (drops quotes around regular identifiers, trims trailing
  * pg_catalog/pg_temp), so the comparison is loose: it asserts every
  * non-implicit schema we want appears in the stored entry.
+ *
+ * Two precedence subtleties matter:
+ *
+ *   1. Detection: an `ALTER ROLE … IN DATABASE` setting (setdatabase
+ *      = the active DB's oid) overrides a role-global `ALTER ROLE …`
+ *      one (setdatabase = 0) for sessions on that database. The query
+ *      orders DB-scoped rows first and LIMIT 1 to read the row that
+ *      runtime sessions would actually see — iterating both rows
+ *      would let a matching global value mask a stale DB-scoped one.
+ *
+ *   2. Correction: if the effective row is a stale DB-scoped one,
+ *      writing only the role-global (`ALTER ROLE …`) leaves the
+ *      DB-scoped row in place and runtime sessions still see the
+ *      stale value. So we issue `ALTER ROLE … IN DATABASE … RESET
+ *      search_path` first to drop just that one setting (other DB-
+ *      scoped entries on the same row, like work_mem, are preserved),
+ *      then write the role-global with `ALTER ROLE … SET …`.
  */
 async function ensureRoleSearchPath(
   sql: ReturnType<typeof postgres>,
   role: RoleName,
   desired: string,
 ): Promise<void> {
-  const rows = await sql<{ setconfig: string[] | null }[]>`
-    SELECT s.setconfig
+  const [effective] = await sql<{ setconfig: string[] | null; is_db_scoped: boolean }[]>`
+    SELECT s.setconfig, s.setdatabase <> 0 AS is_db_scoped
     FROM pg_catalog.pg_db_role_setting s
     JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
     WHERE r.rolname = ${role}
       AND (s.setdatabase = 0
            OR s.setdatabase = (SELECT oid FROM pg_catalog.pg_database WHERE datname = pg_catalog.current_database()))
+    ORDER BY s.setdatabase DESC
+    LIMIT 1
   `;
-  const desiredSchemas = parseSearchPathSchemas(desired);
-  for (const row of rows) {
-    const cfg = row.setconfig ?? [];
-    const stored = cfg.find((c) => c.startsWith("search_path="));
-    if (!stored) continue;
-    const storedSchemas = parseSearchPathSchemas(stored.replace(/^search_path=\s*/, ""));
-    if (desiredSchemas.every((s) => storedSchemas.includes(s))) {
-      return;
+
+  if (effective) {
+    const desiredSchemas = parseSearchPathSchemas(desired);
+    const stored = (effective.setconfig ?? []).find((c) => c.startsWith("search_path="));
+    if (stored) {
+      const storedSchemas = parseSearchPathSchemas(stored.replace(/^search_path=\s*/, ""));
+      if (desiredSchemas.every((s) => storedSchemas.includes(s))) {
+        return;
+      }
+    }
+
+    // Effective row is stale. If it's the DB-scoped one, RESET it so
+    // the role-global value (which we're about to set) takes effect.
+    if (effective.is_db_scoped) {
+      const [dbRow] = await sql<{ name: string }[]>`SELECT pg_catalog.current_database() AS name`;
+      const dbName = dbRow?.name ?? "";
+      await sql.unsafe(
+        `ALTER ROLE ${pgIdentifier(role)} IN DATABASE "${dbName.replace(/"/g, '""')}" RESET search_path`,
+      );
     }
   }
+
   await sql.unsafe(`ALTER ROLE ${pgIdentifier(role)} SET search_path = ${desired}`);
 }
 
