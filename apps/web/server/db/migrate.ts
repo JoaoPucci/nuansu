@@ -185,7 +185,17 @@ async function ensureRoleSearchPath(
     const stored = (effective.setconfig ?? []).find((c) => c.startsWith("search_path="));
     if (stored) {
       const storedSchemas = parseSearchPathSchemas(stored.replace(/^search_path=\s*/, ""));
-      if (desiredSchemas.every((s) => storedSchemas.includes(s))) {
+      // Exact-equality match (same schemas, same order, same length)
+      // — `every desired ∈ stored` would let a stale path like
+      // `search_path=evil,public,extensions` pass the check even
+      // though it has an extra schema ahead of `public` that would
+      // shadow unqualified lookups. Schemas like pg_catalog/pg_temp
+      // are stripped by parseSearchPathSchemas because Postgres adds
+      // them implicitly to every session.
+      if (
+        storedSchemas.length === desiredSchemas.length &&
+        storedSchemas.every((s, i) => s === desiredSchemas[i])
+      ) {
         return;
       }
     }

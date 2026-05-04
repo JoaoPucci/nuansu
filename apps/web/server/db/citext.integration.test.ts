@@ -204,4 +204,56 @@ describeIntegration("ensureRoleSearchPath — DB-scoped takes precedence over ro
       await raw.end({ timeout: 1 });
     }
   }, 20_000);
+
+  it("re-applying migrate corrects an extra-schema-prepended search_path", async () => {
+    if (!env) return;
+    const raw = postgres(env.migrateUrl, { max: 1 });
+    try {
+      // Inject `nuansu, public` as the role-global search_path on
+      // nuansu_auth — `public` is present (so a loose "every desired
+      // ∈ stored" check would consider this configured), but the
+      // extra `nuansu` schema is prepended and would resolve
+      // unqualified names through it before public. Exact-equality
+      // detection must reject this stored value and re-issue ALTER.
+      await raw.unsafe(`ALTER ROLE nuansu_auth SET search_path = 'nuansu', 'public'`);
+
+      const before = await raw<{ setconfig: string[] | null }[]>`
+          SELECT setconfig
+          FROM pg_catalog.pg_db_role_setting s
+          JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
+          WHERE r.rolname = 'nuansu_auth' AND s.setdatabase = 0
+        `;
+      expect(before).toHaveLength(1);
+      expect(before[0]?.setconfig?.[0]).toBe("search_path=nuansu, public");
+
+      await runMigrations({
+        migrateUrl: env.migrateUrl,
+        appPassword: env.appPassword,
+        authPassword: env.authPassword,
+        migratePassword: env.migratePassword,
+        sessionProofSecret: env.sessionProofSecret,
+      });
+
+      // After re-migrate, the role-global search_path should match the
+      // desired exactly (no `nuansu` prefix). The stored form drops
+      // pg_catalog/pg_temp + quotes around `public`, so the assertion
+      // checks the entry starts with `public`, not `nuansu`.
+      const after = await raw<{ setconfig: string[] | null }[]>`
+          SELECT setconfig
+          FROM pg_catalog.pg_db_role_setting s
+          JOIN pg_catalog.pg_roles r ON r.oid = s.setrole
+          WHERE r.rolname = 'nuansu_auth' AND s.setdatabase = 0
+        `;
+      const sp = after[0]?.setconfig?.find((c) => c.startsWith("search_path="));
+      expect(sp).toBeDefined();
+      // `nuansu` MUST NOT be in the list (extra schema dropped).
+      expect(sp).not.toMatch(/\bnuansu\b/);
+      // `public` is the first / only mandatory entry (then optional
+      // citext schema if extensions live elsewhere, then auto-included
+      // pg_catalog/pg_temp which Postgres trims).
+      expect(sp).toMatch(/^search_path=\s*"?public"?/);
+    } finally {
+      await raw.end({ timeout: 1 });
+    }
+  }, 20_000);
 });
