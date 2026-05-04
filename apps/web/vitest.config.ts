@@ -6,8 +6,17 @@ export default defineConfig({
     name: "web",
     environment: "node",
     globals: false,
-    include: ["lib/**/*.test.ts", "server/**/*.test.ts", "src/**/*.test.{ts,tsx}"],
+    include: [
+      "lib/**/*.test.ts",
+      "server/**/*.test.ts",
+      "server/**/*.integration.test.ts",
+      "src/**/*.test.{ts,tsx}",
+    ],
     exclude: ["**/node_modules/**", "**/dist/**", "**/e2e/**"],
+    // Apply the full migration pipeline once before any integration /
+    // fitness test runs. See test/setup/global-db.ts for the rationale
+    // (avoids per-worker migration races on the secret upsert).
+    globalSetup: ["./test/setup/global-db.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "lcov"],

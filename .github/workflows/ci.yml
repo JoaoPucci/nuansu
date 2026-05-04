@@ -64,9 +64,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test --coverage
         env:
-          DATABASE_URL: postgres://nuansu:nuansu_dev@localhost:5432/nuansu_test
+          # Three DB roles per back_end_architecture.md §3.3. The migrate
+          # runner connects as the docker-compose superuser (nuansu) and
+          # creates the nuansu_app/nuansu_auth/nuansu_migrate roles on
+          # first bootstrap with the passwords parsed from the URLs.
+          DATABASE_URL: postgres://nuansu_app:nuansu_app_ci@localhost:5432/nuansu_test
+          AUTH_DATABASE_URL: postgres://nuansu_auth:nuansu_auth_ci@localhost:5432/nuansu_test
+          MIGRATE_DATABASE_URL: postgres://nuansu:nuansu_dev@localhost:5432/nuansu_test
           DIRECT_DATABASE_URL: postgres://nuansu:nuansu_dev@localhost:5432/nuansu_test
           BETTER_AUTH_SECRET: ci_test_secret_at_least_32_bytes_xxxxxxxx
+          NUANSU_DB_SESSION_PROOF_SECRET: ci_test_session_proof_secret_at_least_32_bytes_yyyyyyyy
           LLM_PROVIDER: stub
           STRIPE_PROVIDER: stub
           EMAIL_PROVIDER: stub
@@ -114,8 +121,11 @@ jobs:
       - run: pnpm test:e2e
         if: steps.e2e-guard.outputs.has-tests == 'true'
         env:
-          DATABASE_URL: postgres://nuansu:nuansu_dev@localhost:5432/nuansu_test
+          DATABASE_URL: postgres://nuansu_app:nuansu_app_ci@localhost:5432/nuansu_test
+          AUTH_DATABASE_URL: postgres://nuansu_auth:nuansu_auth_ci@localhost:5432/nuansu_test
+          MIGRATE_DATABASE_URL: postgres://nuansu:nuansu_dev@localhost:5432/nuansu_test
           BETTER_AUTH_SECRET: ci_test_secret_at_least_32_bytes_xxxxxxxx
+          NUANSU_DB_SESSION_PROOF_SECRET: ci_test_session_proof_secret_at_least_32_bytes_yyyyyyyy
           LLM_PROVIDER: stub
           STRIPE_PROVIDER: stub
           EMAIL_PROVIDER: stub
