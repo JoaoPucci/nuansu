@@ -1,10 +1,14 @@
-// Migration orchestrator — bootstraps the three Postgres roles, applies
-// the static bootstrap SQL, runs Drizzle's migration suite, then applies
-// the RLS policies + role grants. Run via `pnpm db:migrate`.
+// Migration orchestrator — creates the three Postgres roles on first
+// bootstrap, applies the static bootstrap SQL, runs Drizzle's migration
+// suite, then applies the RLS policies + table grants. Run via
+// `pnpm db:migrate`.
 //
 // Idempotent end-to-end. Safe to re-run on every deploy. Uses the
 // MIGRATE_DATABASE_URL connection (which must have CREATE ROLE
-// privilege; in dev/CI this is the docker-compose superuser).
+// privilege on first bootstrap; in dev/CI this is the docker-compose
+// superuser). Subsequent runs do NOT mutate role attributes — see
+// ensureRole's docstring for why and what that means for password
+// rotation.
 
 import { migrate as drizzleMigrate } from "drizzle-orm/postgres-js/migrator";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -16,11 +20,11 @@ import postgres from "postgres";
 interface MigrateOptions {
   /** Connection URL for the role applying DDL (creates roles, runs migrations). */
   migrateUrl: string;
-  /** Password for the runtime nuansu_app role. CREATE/ALTER ROLE on every run. */
+  /** Password used when CREATING the runtime nuansu_app role on first bootstrap (ignored on subsequent runs — rotation is an operator task). */
   appPassword: string;
-  /** Password for the Better Auth nuansu_auth role. CREATE/ALTER ROLE on every run. */
+  /** Password used when CREATING the Better Auth nuansu_auth role on first bootstrap (ignored on subsequent runs). */
   authPassword: string;
-  /** Password for the migration nuansu_migrate role itself (for non-superuser deploys). */
+  /** Password used when CREATING the migration nuansu_migrate role itself on first bootstrap (ignored on subsequent runs). */
   migratePassword: string;
   /** HMAC secret stored in nuansu.config; matches NUANSU_DB_SESSION_PROOF_SECRET. */
   sessionProofSecret: string;
@@ -77,6 +81,21 @@ function pgIdentifier(name: string): string {
   return `"${name}"`;
 }
 
+/**
+ * Create a role if it doesn't already exist. Subsequent runs (after the
+ * role is created on first bootstrap) are no-ops by design.
+ *
+ * Why no ALTER on existing roles: in Postgres 16+, ALTER ROLE requires
+ * the issuing role to hold ADMIN OPTION on the target role. A role does
+ * NOT hold admin on itself by default, so the migration runner — which
+ * connects as MIGRATE_DATABASE_URL's principal — would fail to ALTER
+ * its own login on the second run if MIGRATE_DATABASE_URL points at
+ * `nuansu_migrate`. The doc'd production posture (back_end_architecture.md
+ * §3.3) is that role passwords are set ONCE during the first bootstrap
+ * and rotated out-of-band by the operator (e.g., a one-shot psql or
+ * cloud-console action), not on every deploy. The `password` argument
+ * here is therefore only consulted when the role is being created.
+ */
 async function ensureRole(
   sql: ReturnType<typeof postgres>,
   role: RoleName,
@@ -85,10 +104,8 @@ async function ensureRole(
   const exists = await sql<{ rolname: string }[]>`
     SELECT rolname FROM pg_catalog.pg_roles WHERE rolname = ${role}
   `;
-  const action = exists.length === 0 ? "CREATE" : "ALTER";
-  await sql.unsafe(
-    `${action} ROLE ${pgIdentifier(role)} WITH LOGIN PASSWORD ${pgLiteral(password)}`,
-  );
+  if (exists.length > 0) return;
+  await sql.unsafe(`CREATE ROLE ${pgIdentifier(role)} WITH LOGIN PASSWORD ${pgLiteral(password)}`);
 }
 
 function migrationsDir(): string {
@@ -132,7 +149,11 @@ export async function runMigrations(opts: MigrateOptions): Promise<void> {
   try {
     // 1. Roles first — bootstrap.sql references nuansu_app/nuansu_auth/
     //    nuansu_migrate via GRANT and AUTHORIZATION clauses, so they
-    //    must already exist.
+    //    must already exist. ensureRole is CREATE-on-missing only;
+    //    password rotation is not the migrate runner's job (Postgres
+    //    16+ ADMIN-OPTION semantics make per-run ALTER fragile, and
+    //    rotation is an operator task — see ensureRole's docstring
+    //    for the rationale).
     await ensureRole(sql, "nuansu_migrate", opts.migratePassword);
     await ensureRole(sql, "nuansu_app", opts.appPassword);
     await ensureRole(sql, "nuansu_auth", opts.authPassword);
