@@ -37,7 +37,19 @@ GRANT USAGE ON SCHEMA nuansu TO nuansu_app, nuansu_auth;
 -- grant, switching MIGRATE_DATABASE_URL to nuansu_migrate would fail
 -- on the next schema-adding migration with `permission denied for
 -- schema public`.
-GRANT USAGE, CREATE ON SCHEMA public TO nuansu_migrate;
+--
+-- Detection-then-mutate: the GRANT itself requires ownership of the
+-- public schema, which a re-running nuansu_migrate doesn't have on
+-- managed Postgres. Skip when both privileges are already in place
+-- (typical post-first-bootstrap state).
+DO $bootstrap_public_grant$
+BEGIN
+  IF NOT (pg_catalog.has_schema_privilege('nuansu_migrate', 'public', 'USAGE')
+          AND pg_catalog.has_schema_privilege('nuansu_migrate', 'public', 'CREATE')) THEN
+    GRANT USAGE, CREATE ON SCHEMA public TO nuansu_migrate;
+  END IF;
+END;
+$bootstrap_public_grant$;
 
 -- nuansu.config: server-side store for the HMAC secret used by
 -- nuansu.verify_hmac(). Owned by nuansu_migrate; no other role has any
@@ -83,7 +95,14 @@ BEGIN
   -- needs USAGE on the extension's schema to resolve hmac(). The app
   -- and auth roles do NOT need it — they only call nuansu.verify_hmac
   -- via nuansu.current_user_id() which is also SECURITY DEFINER.
-  EXECUTE pg_catalog.format('GRANT USAGE ON SCHEMA %I TO nuansu_migrate', pgcrypto_schema);
+  --
+  -- Detection-then-mutate: re-issuing GRANT USAGE requires ownership of
+  -- pgcrypto's schema, which a re-running nuansu_migrate doesn't hold
+  -- on managed Postgres (where `extensions` is platform-owned). Skip
+  -- when the privilege is already present from first-bootstrap.
+  IF NOT pg_catalog.has_schema_privilege('nuansu_migrate', pgcrypto_schema, 'USAGE') THEN
+    EXECUTE pg_catalog.format('GRANT USAGE ON SCHEMA %I TO nuansu_migrate', pgcrypto_schema);
+  END IF;
 
   EXECUTE pg_catalog.format(
     $verify$
