@@ -190,8 +190,8 @@ importers:
         specifier: ^1.49.1
         version: 1.59.1
       '@size-limit/preset-app':
-        specifier: ^11.1.6
-        version: 11.2.0(size-limit@12.1.0(jiti@2.6.1))
+        specifier: ^12.1.0
+        version: 12.1.0(size-limit@12.1.0(jiti@2.6.1))
       '@tailwindcss/vite':
         specifier: ^4.2.4
         version: 4.2.4(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.7)(jiti@2.6.1)(terser@5.46.2)(tsx@4.21.0))
@@ -2595,22 +2595,22 @@ packages:
     resolution: {integrity: sha512-dNZafjM93Y+F+sfwTO5gTpsGXlnc/0Q+c2+62ViqP3gkMWvHEMSKkaEHgVJLcLg3i/g19GSIPziiKpgyne07Bw==}
     engines: {node: '>=8'}
 
-  '@size-limit/file@11.2.0':
-    resolution: {integrity: sha512-OZHE3putEkQ/fgzz3Tp/0hSmfVo3wyTpOJSRNm6AmcwX4Nm9YtTfbQQ/hZRwbBFR23S7x2Sd9EbqYzngKwbRoA==}
-    engines: {node: ^18.0.0 || >=20.0.0}
+  '@size-limit/file@12.1.0':
+    resolution: {integrity: sha512-eGwDcIufnNnvJRzv3liDOn6MAOGgmOTUdpeGQ2KuRTlgIgO54AJH1ilvktlJc6PIjNfwpYY0dOGyap1QgM1swQ==}
+    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
     peerDependencies:
-      size-limit: 11.2.0
+      size-limit: 12.1.0
 
-  '@size-limit/preset-app@11.2.0':
-    resolution: {integrity: sha512-mIOLQm9Vi4pQpwEuGxsdNtH9xBxTNUkV2+qbUFnUYeKUXsTrtPGdfDYSE48rzg+TfbyeOC3sH4HvVwHi0BRbIA==}
+  '@size-limit/preset-app@12.1.0':
+    resolution: {integrity: sha512-pGGOxzDMM6MUXCzTwUjIcgex9RYbGdvQYni1rUtsZ1oojm7JvOSbBMiJPe9PhpmDq/aMsVzjP1oN0guq1RptVw==}
     peerDependencies:
-      size-limit: 11.2.0
+      size-limit: 12.1.0
 
-  '@size-limit/time@11.2.0':
-    resolution: {integrity: sha512-bL7EnxL3jivVipnlf1xUYDgbnAOinkl6pbNc3WSFkEOFEwy7i58rqOFs5H4iS3Y0mrCueafakUpIW25HiKZZPA==}
-    engines: {node: ^18.0.0 || >=20.0.0}
+  '@size-limit/time@12.1.0':
+    resolution: {integrity: sha512-ekYPeZcvkPSLsHtqNmz7F5jx3R0HV7CpY7kGasBW2yKR3NrD0JWMAcswS9OCR8OzK9hyLACRTNYTpLI9PXLczQ==}
+    engines: {node: ^20.0.0 || ^22.0.0 || >=24.0.0}
     peerDependencies:
-      size-limit: 11.2.0
+      size-limit: 12.1.0
 
   '@speed-highlight/core@1.2.15':
     resolution: {integrity: sha512-BMq1K3DsElxDWawkX6eLg9+CKJrTVGCBAWVuHXVUV2u0s2711qiChLSId6ikYPfxhdYocLNt3wWwSvDiTvFabw==}
@@ -9803,14 +9803,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@size-limit/file@11.2.0(size-limit@12.1.0(jiti@2.6.1))':
+  '@size-limit/file@12.1.0(size-limit@12.1.0(jiti@2.6.1))':
     dependencies:
       size-limit: 12.1.0(jiti@2.6.1)
 
-  '@size-limit/preset-app@11.2.0(size-limit@12.1.0(jiti@2.6.1))':
+  '@size-limit/preset-app@12.1.0(size-limit@12.1.0(jiti@2.6.1))':
     dependencies:
-      '@size-limit/file': 11.2.0(size-limit@12.1.0(jiti@2.6.1))
-      '@size-limit/time': 11.2.0(size-limit@12.1.0(jiti@2.6.1))
+      '@size-limit/file': 12.1.0(size-limit@12.1.0(jiti@2.6.1))
+      '@size-limit/time': 12.1.0(size-limit@12.1.0(jiti@2.6.1))
       size-limit: 12.1.0(jiti@2.6.1)
     transitivePeerDependencies:
       - bare-abort-controller
@@ -9820,7 +9820,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@size-limit/time@11.2.0(size-limit@12.1.0(jiti@2.6.1))':
+  '@size-limit/time@12.1.0(size-limit@12.1.0(jiti@2.6.1))':
     dependencies:
       estimo: 3.0.5
       size-limit: 12.1.0(jiti@2.6.1)
