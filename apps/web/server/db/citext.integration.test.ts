@@ -136,7 +136,13 @@ describeIntegration("ensureRoleSearchPath — DB-scoped takes precedence over ro
       // matching global row first and return early — runtime
       // sessions would still see the stale DB-scoped value (no
       // public schema → user-scoped tables unreachable).
-      await raw.unsafe(`ALTER ROLE nuansu_auth IN DATABASE nuansu SET search_path = 'pg_temp'`);
+      //
+      // Database name is read from the connection (dev: "nuansu",
+      // CI: "nuansu_test"), then quoted as a SQL identifier.
+      const dbRows = (await raw`SELECT current_database() AS db`) as unknown as { db: string }[];
+      const dbName = dbRows[0]?.db ?? "";
+      const dbIdent = `"${dbName.replace(/"/g, '""')}"`;
+      await raw.unsafe(`ALTER ROLE nuansu_auth IN DATABASE ${dbIdent} SET search_path = 'pg_temp'`);
 
       const before = await raw<{ setconfig: string[] | null }[]>`
           SELECT setconfig
