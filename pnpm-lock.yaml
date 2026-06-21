@@ -67,10 +67,10 @@ importers:
         version: 0.92.0(zod@4.4.2)
       '@hono/node-server':
         specifier: ^2.0.1
-        version: 2.0.1(hono@4.12.16)
+        version: 2.0.1(hono@4.12.25)
       '@hono/zod-validator':
         specifier: ^0.7.6
-        version: 0.7.6(hono@4.12.16)(zod@4.4.2)
+        version: 0.7.6(hono@4.12.25)(zod@4.4.2)
       '@noble/ciphers':
         specifier: ^2.2.0
         version: 2.2.0
@@ -123,8 +123,8 @@ importers:
         specifier: ^12.38.0
         version: 12.38.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       hono:
-        specifier: ^4.12.16
-        version: 4.12.16
+        specifier: ^4.12.25
+        version: 4.12.25
       i18next:
         specifier: ^26.0.8
         version: 26.0.8(typescript@5.9.3)
@@ -4939,8 +4939,8 @@ packages:
   history@5.3.0:
     resolution: {integrity: sha512-ZqaKwjjrAYUYfLG+htGaIIZ4nioX2L70ZUMIFysS3xvBsSG4x/n1V6TXV3N8ZYNuFGlDirFg32T7B6WOUPDYcQ==}
 
-  hono@4.12.16:
-    resolution: {integrity: sha512-jN0ZewiNAWSe5khM3EyCmBb250+b40wWbwNILNfEvq84VREWwOIkuUsFONk/3i3nqkz7Oe1PcpM2mwQEK2L9Kg==}
+  hono@4.12.25:
+    resolution: {integrity: sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@4.0.0:
@@ -9217,13 +9217,13 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@hono/node-server@2.0.1(hono@4.12.16)':
+  '@hono/node-server@2.0.1(hono@4.12.25)':
     dependencies:
-      hono: 4.12.16
+      hono: 4.12.25
 
-  '@hono/zod-validator@0.7.6(hono@4.12.16)(zod@4.4.2)':
+  '@hono/zod-validator@0.7.6(hono@4.12.25)(zod@4.4.2)':
     dependencies:
-      hono: 4.12.16
+      hono: 4.12.25
       zod: 4.4.2
 
   '@humanfs/core@0.19.2':
@@ -12523,7 +12523,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.2
 
-  hono@4.12.16: {}
+  hono@4.12.25: {}
 
   html-encoding-sniffer@4.0.0:
     dependencies:
