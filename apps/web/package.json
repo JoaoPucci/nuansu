@@ -82,8 +82,8 @@
     "vite": "^8.0.16",
     "vite-plugin-pwa": "^1.3.0",
     "vite-react-ssg": "^0.9.0",
-    "wrangler": "^4.103.0",
-    "@cloudflare/workers-types": "^4.20260621.1",
+    "wrangler": "^4.105.0",
+    "@cloudflare/workers-types": "^4.20260628.1",
     "@tanstack/router-cli": "^1.167.17",
     "zustand": "^5.0.14"
   },
